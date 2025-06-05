@@ -97,21 +97,34 @@ go fmt ./...
 golint ./...
 ```
 
-### Phase 4: デプロイ・環境構築（後続フェーズ）
+### Phase 4: デプロイ・環境構築（決定済み）✅
 
-#### 4.1 デプロイ先検討
-**候補:**
-- **Google Cloud Run**: コンテナベース、自動スケーリング
-- **AWS Lambda**: サーバーレス実行
-- **Heroku**: 簡単デプロイ
-- **VPS**: 従来型サーバー
-- **Railway**: モダンなデプロイプラットフォーム
+#### 4.1 デプロイ先決定
+**採用: Google Cloud Functions + Cloud Scheduler**
+- **理由**: 月額ほぼ無料（0-30円）、設定最シンプル、540秒制限で十分
+- **URL**: 固定URL取得可能
+- **監視**: Cloud Logging/Monitoring無料枠内で十分
 
-#### 4.2 インフラ構成
-- [ ] Dockerコンテナ化
-- [ ] CI/CDパイプライン構築
-- [ ] 環境変数管理
-- [ ] ログ・モニタリング設定
+#### 4.2 技術スタック決定
+- **実行環境**: Google Cloud Functions（Go 1.21 runtime）
+- **定時実行**: Cloud Scheduler（cron設定）
+- **認証**: Bearer Token（iOSショートカット対応）
+- **キャッシュ**: Cloud Storage + JSON形式
+- **インフラ管理**: Cloud Deployment Manager（YAML）
+- **監視**: Google Cloud標準（無料枠内）
+
+#### 4.3 実装変更点
+- [x] ~~HTTPサーバー実装~~ → Cloud Functions用ラッパー
+- [x] ~~SQLite/CSV~~ → JSON形式キャッシュ
+- [x] ~~Docker~~ → ソースコード直接デプロイ
+- [ ] Cloud Functions対応
+- [ ] JSONキャッシュ実装
+- [ ] Cloud Deployment Manager設定
+
+#### 4.4 削除対象ファイル
+- [ ] Dockerfile
+- [ ] docker-compose.yml
+- [ ] .dockerignore
 
 ### Phase 5: 本番移行
 
@@ -158,13 +171,13 @@ article-summarizer-v3/
 | 項目 | v1 (GAS) | v2 (TypeScript/CF) | v3 (Go) |
 |------|----------|-------------------|---------|
 | **言語** | JavaScript | TypeScript | Go |
-| **実行環境** | Google Apps Script | Cloudflare Workers | 汎用サーバー |
+| **実行環境** | Google Apps Script | Cloudflare Workers | **Google Cloud Functions** |
 | **メンテナンス性** | 低 | 中 | **高** |
 | **ライブラリ更新** | 手動・困難 | 頻繁・自動化必要 | **最小限** |
 | **パフォーマンス** | 低 | 高 | **最高** |
 | **デプロイ複雑さ** | 簡単 | 中程度 | **シンプル** |
 | **スケーラビリティ** | 限定的 | 高 | **高** |
-| **運用コスト** | 低 | 中 | **低〜中** |
+| **運用コスト** | 低 | 中 | **月額0-30円** |
 
 ## 🛠️ 開発環境
 
@@ -203,11 +216,12 @@ make build
 - [ ] Webhook API
 - [ ] 定期処理
 
-### ⏳ Phase 2: 環境構築・デプロイ（後続）
-- [ ] Dockerコンテナ化
-- [ ] デプロイ先選定・設定
-- [ ] CI/CDパイプライン
-- [ ] 環境変数管理
+### ✅ Phase 2: 環境構築・デプロイ（決定済み）
+- [x] デプロイ先選定（Google Cloud Functions）
+- [x] キャッシュ方式決定（Cloud Storage + JSON）
+- [x] 認証方式決定（Bearer Token）
+- [ ] Cloud Functions実装
+- [ ] Cloud Deployment Manager設定
 - [ ] モニタリング設定
 
 ### ⏳ Phase 3: 本番移行（最終）
@@ -230,6 +244,6 @@ make build
 
 ---
 
-🚀 **まずはGo実装から始めて、安定したシステムを構築しましょう！**
+🚀 **Phase 4 完了！Google Cloud Functionsで安定したシステムを構築します！**
 
-デプロイ先や運用環境は実装完了後に最適解を選択する方針で進めます。
+次のフェーズではCloud Functions実装とデプロイ設定を進めます。
