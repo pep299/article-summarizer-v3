@@ -27,6 +27,7 @@ type Item struct {
 	GUID        string    `xml:"guid"`
 	Category    []string  `xml:"category"`
 	ParsedDate  time.Time `xml:"-"`
+	Source      string    `xml:"-"` // Added to track source
 }
 
 // Client handles RSS feed operations
@@ -41,12 +42,12 @@ func NewClient() *Client {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		userAgent: "article-summarizer-v3/1.0",
+		userAgent: "Article Summarizer Bot/1.0",
 	}
 }
 
 // FetchFeed fetches and parses an RSS feed from the given URL
-func (c *Client) FetchFeed(ctx context.Context, url string) (*Feed, error) {
+func (c *Client) FetchFeed(ctx context.Context, feedName, url string) ([]Item, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
@@ -70,124 +71,70 @@ func (c *Client) FetchFeed(ctx context.Context, url string) (*Feed, error) {
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 
-	var feed Feed
-	if err := xml.Unmarshal(body, &feed); err != nil {
+	items, err := c.parseRSSXML(string(body))
+	if err != nil {
 		return nil, fmt.Errorf("parsing RSS feed: %w", err)
 	}
 
-	// Parse dates for items
-	for i := range feed.Items {
-		if feed.Items[i].PubDate != "" {
-			if parsedDate, err := parseRSSDate(feed.Items[i].PubDate); err == nil {
-				feed.Items[i].ParsedDate = parsedDate
+	// Set source for all items
+	for i := range items {
+		items[i].Source = feedName
+		// Parse dates for items
+		if items[i].PubDate != "" {
+			if parsedDate, err := parseRSSDate(items[i].PubDate); err == nil {
+				items[i].ParsedDate = parsedDate
 			}
 		}
 	}
 
-	return &feed, nil
+	return items, nil
 }
 
-// FetchMultipleFeeds fetches multiple RSS feeds concurrently with rate limiting
-func (c *Client) FetchMultipleFeeds(ctx context.Context, urls []string) (map[string]*Feed, map[string]error) {
-	const maxConcurrent = 5 // Default max concurrent requests
-	return c.FetchMultipleFeedsWithLimit(ctx, urls, maxConcurrent)
+// parseRSSXML parses RSS XML content (supports both RSS 2.0 and RDF)
+func (c *Client) parseRSSXML(xmlContent string) ([]Item, error) {
+	// Try RSS 2.0 format first
+	var rss struct {
+		Channel struct {
+			Items []Item `xml:"item"`
+		} `xml:"channel"`
+	}
+
+	if err := xml.Unmarshal([]byte(xmlContent), &rss); err == nil && len(rss.Channel.Items) > 0 {
+		return rss.Channel.Items, nil
+	}
+
+	// Try RDF format (used by Hatena Bookmark)
+	var rdf struct {
+		Items []Item `xml:"item"`
+	}
+
+	if err := xml.Unmarshal([]byte(xmlContent), &rdf); err == nil && len(rdf.Items) > 0 {
+		return rdf.Items, nil
+	}
+
+	return nil, fmt.Errorf("unable to parse RSS format")
 }
 
-// FetchMultipleFeedsWithLimit fetches multiple RSS feeds concurrently with specified concurrency limit
-func (c *Client) FetchMultipleFeedsWithLimit(ctx context.Context, urls []string, maxConcurrent int) (map[string]*Feed, map[string]error) {
-	type result struct {
-		url  string
-		feed *Feed
-		err  error
-	}
-
-	results := make(chan result, len(urls))
-	semaphore := make(chan struct{}, maxConcurrent)
-	
-	// Start goroutines for each feed with rate limiting
-	for _, url := range urls {
-		go func(u string) {
-			// Acquire semaphore
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }() // Release semaphore
-			
-			feed, err := c.FetchFeed(ctx, u)
-			results <- result{url: u, feed: feed, err: err}
-		}(url)
-	}
-
-	// Collect results
-	feeds := make(map[string]*Feed)
-	errors := make(map[string]error)
-
-	for i := 0; i < len(urls); i++ {
-		res := <-results
-		if res.err != nil {
-			errors[res.url] = res.err
-		} else {
-			feeds[res.url] = res.feed
-		}
-	}
-
-	return feeds, errors
-}
-
-// FilterItems filters RSS items based on criteria
-func FilterItems(items []Item, options FilterOptions) []Item {
+// FilterItems filters RSS items (only removes "ask" category like v1)
+func FilterItems(items []Item) []Item {
 	var filtered []Item
 
 	for _, item := range items {
-		if shouldIncludeItem(item, options) {
+		// Only filter out "ask" category (same as v1 Lobsters filtering)
+		shouldInclude := true
+		for _, category := range item.Category {
+			if strings.EqualFold(category, "ask") {
+				shouldInclude = false
+				break
+			}
+		}
+
+		if shouldInclude {
 			filtered = append(filtered, item)
 		}
 	}
 
 	return filtered
-}
-
-// FilterOptions holds filtering criteria
-type FilterOptions struct {
-	ExcludeCategories []string
-	MinTitleLength    int
-	MaxAge            time.Duration
-	ExcludeKeywords   []string
-}
-
-// shouldIncludeItem checks if an item should be included based on filter options
-func shouldIncludeItem(item Item, options FilterOptions) bool {
-	// Check title length
-	if options.MinTitleLength > 0 && len(item.Title) < options.MinTitleLength {
-		return false
-	}
-
-	// Check age
-	if options.MaxAge > 0 && !item.ParsedDate.IsZero() {
-		if time.Since(item.ParsedDate) > options.MaxAge {
-			return false
-		}
-	}
-
-	// Check excluded categories
-	for _, category := range item.Category {
-		for _, excluded := range options.ExcludeCategories {
-			if strings.EqualFold(category, excluded) {
-				return false
-			}
-		}
-	}
-
-	// Check excluded keywords in title and description
-	titleLower := strings.ToLower(item.Title)
-	descLower := strings.ToLower(item.Description)
-	
-	for _, keyword := range options.ExcludeKeywords {
-		keywordLower := strings.ToLower(keyword)
-		if strings.Contains(titleLower, keywordLower) || strings.Contains(descLower, keywordLower) {
-			return false
-		}
-	}
-
-	return true
 }
 
 // parseRSSDate parses various RSS date formats
@@ -221,7 +168,7 @@ func GetUniqueItems(items []Item) []Item {
 		if key == "" {
 			key = item.Link
 		}
-		
+
 		if key != "" && !seen[key] {
 			seen[key] = true
 			unique = append(unique, item)

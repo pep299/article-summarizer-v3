@@ -24,10 +24,21 @@ func main() {
 
 	ctx := context.Background()
 
-	// Process RSS feeds and send notifications
-	err = server.ProcessAndNotify(ctx)
-	if err != nil {
-		log.Fatalf("Processing failed: %v", err)
+	// Process all enabled RSS feeds one by one (v1 style)
+	for feedName, feedConfig := range cfg.RSSFeeds {
+		if !feedConfig.Enabled {
+			log.Printf("Skipping disabled feed: %s", feedName)
+			continue
+		}
+
+		log.Printf("🚀 Processing feed: %s", feedConfig.Name)
+		err = server.ProcessSingleFeed(ctx, feedName)
+		if err != nil {
+			log.Printf("❌ Processing failed for %s: %v", feedConfig.Name, err)
+		} else {
+			log.Printf("✅ Processing completed for %s", feedConfig.Name)
+		}
 	}
-	fmt.Println("Processing completed successfully")
+
+	fmt.Println("🎉 All feeds processing completed successfully")
 }

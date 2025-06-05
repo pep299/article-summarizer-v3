@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -44,15 +45,13 @@ type SummarizeRequest struct {
 // SummarizeResponse represents a summarization response
 type SummarizeResponse struct {
 	Summary     string    `json:"summary"`
-	KeyPoints   []string  `json:"key_points"`
-	Category    string    `json:"category"`
-	Confidence  float64   `json:"confidence"`
 	ProcessedAt time.Time `json:"processed_at"`
 }
 
 // geminiRequest represents the request structure for Gemini API
 type geminiRequest struct {
 	Contents []geminiContent `json:"contents"`
+	GenerationConfig *geminiGenerationConfig `json:"generationConfig,omitempty"`
 }
 
 type geminiContent struct {
@@ -61,6 +60,12 @@ type geminiContent struct {
 
 type geminiPart struct {
 	Text string `json:"text"`
+}
+
+type geminiGenerationConfig struct {
+	Temperature     float64 `json:"temperature"`
+	TopP           float64 `json:"topP"`
+	MaxOutputTokens int     `json:"maxOutputTokens"`
 }
 
 // geminiResponse represents the response structure from Gemini API
@@ -72,10 +77,157 @@ type geminiCandidate struct {
 	Content geminiContent `json:"content"`
 }
 
-// SummarizeArticle summarizes an article using Gemini API
-func (c *Client) SummarizeArticle(ctx context.Context, req SummarizeRequest) (*SummarizeResponse, error) {
-	prompt := c.buildPrompt(req)
+// SummarizeURL summarizes a URL by fetching content and sending to Gemini (RSS mode)
+func (c *Client) SummarizeURL(ctx context.Context, url string) (*SummarizeResponse, error) {
+	// Fetch HTML content
+	htmlContent, err := c.fetchHTML(ctx, url)
+	if err != nil {
+		return nil, fmt.Errorf("fetching HTML: %w", err)
+	}
+
+	// Extract text from HTML
+	textContent := c.extractTextFromHTML(htmlContent)
+	if textContent == "" {
+		return nil, fmt.Errorf("no text content found")
+	}
+
+	// Create prompt for RSS mode (shorter summary for team sharing)
+	prompt := c.buildRSSPrompt(textContent)
 	
+	// Call Gemini API
+	summary, err := c.callGeminiAPI(ctx, prompt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SummarizeResponse{
+		Summary:     summary,
+		ProcessedAt: time.Now(),
+	}, nil
+}
+
+// SummarizeURLForOnDemand summarizes a URL for on-demand requests (longer summary)
+func (c *Client) SummarizeURLForOnDemand(ctx context.Context, url string) (*SummarizeResponse, error) {
+	// Fetch HTML content
+	htmlContent, err := c.fetchHTML(ctx, url)
+	if err != nil {
+		return nil, fmt.Errorf("fetching HTML: %w", err)
+	}
+
+	// Extract text from HTML
+	textContent := c.extractTextFromHTML(htmlContent)
+	if textContent == "" {
+		return nil, fmt.Errorf("no text content found")
+	}
+
+	// Create prompt for on-demand mode (longer summary)
+	prompt := c.buildOnDemandPrompt(textContent)
+	
+	// Call Gemini API
+	summary, err := c.callGeminiAPI(ctx, prompt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SummarizeResponse{
+		Summary:     summary,
+		ProcessedAt: time.Now(),
+	}, nil
+}
+
+// fetchHTML fetches HTML content from a URL
+func (c *Client) fetchHTML(ctx context.Context, url string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Article Summarizer Bot/1.0)")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetching URL: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading response body: %w", err)
+	}
+
+	return string(body), nil
+}
+
+// extractTextFromHTML extracts text content from HTML (same as v1)
+func (c *Client) extractTextFromHTML(html string) string {
+	// Remove script and style tags
+	scriptRe := regexp.MustCompile(`(?i)<script[^>]*>[\s\S]*?</script>`)
+	html = scriptRe.ReplaceAllString(html, "")
+	
+	styleRe := regexp.MustCompile(`(?i)<style[^>]*>[\s\S]*?</style>`)
+	html = styleRe.ReplaceAllString(html, "")
+	
+	// Remove HTML tags
+	tagRe := regexp.MustCompile(`<[^>]+>`)
+	text := tagRe.ReplaceAllString(html, " ")
+	
+	// Normalize whitespace
+	spaceRe := regexp.MustCompile(`\s+`)
+	text = spaceRe.ReplaceAllString(text, " ")
+	
+	return strings.TrimSpace(text)
+}
+
+// buildRSSPrompt creates a prompt for RSS mode (same as v1)
+func (c *Client) buildRSSPrompt(textContent string) string {
+	// Limit content to 10KB
+	if len(textContent) > 10000 {
+		textContent = textContent[:10000]
+	}
+
+	return fmt.Sprintf(`以下のテキストを、Slackチャンネルでチームメンバーが素早く理解できるよう、1000文字以内で簡潔に要約してください。
+
+**重要な制約:**
+- 推測や創作は一切せず、実際に記載されている内容のみを要約してください
+- 記載されていない情報は追加しないでください
+
+チーム共有を前提とした読みやすい形式で、以下の構造で出力してください：
+- 📝 **要約:** 実際の内容を3-4行で簡潔に
+- 🎯 **対象者:** 記載されている課題や対象を基に
+- 💡 **解決効果:** 明記されている効果や解決策のみ
+
+テキスト内容:
+%s`, textContent)
+}
+
+// buildOnDemandPrompt creates a prompt for on-demand mode (same as v1)
+func (c *Client) buildOnDemandPrompt(textContent string) string {
+	// Limit content to 10KB
+	if len(textContent) > 10000 {
+		textContent = textContent[:10000]
+	}
+
+	return fmt.Sprintf(`以下のテキストを、Slackチャンネルでチームメンバーが素早く理解できるよう、800-1200文字程度（短すぎず長すぎない適切な分量）で要約してください。
+
+**重要な制約:**
+- 推測や創作は一切せず、実際に記載されている内容のみを要約してください
+- 記載されていない情報は追加しないでください
+
+チーム共有を前提とした読みやすい形式で、以下の構造で出力してください：
+- 📝 **要約:** 実際の内容を3-4行で簡潔に
+- 🎯 **対象者:** 記載されている課題や対象を基に
+- 💡 **解決効果:** 明記されている効果や解決策のみ
+
+テキスト内容:
+%s`, textContent)
+}
+
+// callGeminiAPI makes the actual API call to Gemini
+func (c *Client) callGeminiAPI(ctx context.Context, prompt string) (string, error) {
 	geminiReq := geminiRequest{
 		Contents: []geminiContent{
 			{
@@ -84,157 +236,48 @@ func (c *Client) SummarizeArticle(ctx context.Context, req SummarizeRequest) (*S
 				},
 			},
 		},
+		GenerationConfig: &geminiGenerationConfig{
+			Temperature:     0.3,
+			TopP:           0.8,
+			MaxOutputTokens: 8000,
+		},
 	}
 
 	url := fmt.Sprintf("%s/%s:generateContent?key=%s", c.baseURL, c.model, c.apiKey)
-	
+
 	body, err := json.Marshal(geminiReq)
 	if err != nil {
-		return nil, fmt.Errorf("marshaling request: %w", err)
+		return "", fmt.Errorf("marshaling request: %w", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+		return "", fmt.Errorf("creating request: %w", err)
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("sending request: %w", err)
+		return "", fmt.Errorf("sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var geminiResp geminiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		return nil, fmt.Errorf("decoding response: %w", err)
+		return "", fmt.Errorf("decoding response: %w", err)
 	}
 
 	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("no content in response")
+		return "", fmt.Errorf("no content in response")
 	}
 
-	responseText := geminiResp.Candidates[0].Content.Parts[0].Text
-	
-	return c.parseResponse(responseText), nil
-}
-
-// SummarizeMultipleArticles summarizes multiple articles concurrently
-func (c *Client) SummarizeMultipleArticles(ctx context.Context, requests []SummarizeRequest, maxConcurrent int) ([]SummarizeResponse, []error) {
-	type result struct {
-		index    int
-		response *SummarizeResponse
-		err      error
-	}
-
-	// Create semaphore for rate limiting
-	semaphore := make(chan struct{}, maxConcurrent)
-	results := make(chan result, len(requests))
-
-	// Start goroutines for each request
-	for i, req := range requests {
-		go func(index int, request SummarizeRequest) {
-			semaphore <- struct{}{} // Acquire semaphore
-			defer func() { <-semaphore }() // Release semaphore
-
-			resp, err := c.SummarizeArticle(ctx, request)
-			results <- result{index: index, response: resp, err: err}
-		}(i, req)
-	}
-
-	// Collect results
-	responses := make([]SummarizeResponse, len(requests))
-	errors := make([]error, len(requests))
-
-	for i := 0; i < len(requests); i++ {
-		res := <-results
-		if res.err != nil {
-			errors[res.index] = res.err
-		} else {
-			responses[res.index] = *res.response
-		}
-	}
-
-	return responses, errors
-}
-
-// buildPrompt creates a prompt for the Gemini API
-func (c *Client) buildPrompt(req SummarizeRequest) string {
-	var content strings.Builder
-	
-	content.WriteString("記事を要約してください。以下の形式でJSON形式で回答してください：\n\n")
-	content.WriteString("{\n")
-	content.WriteString("  \"summary\": \"記事の要約（3-4文程度）\",\n")
-	content.WriteString("  \"key_points\": [\"重要なポイント1\", \"重要なポイント2\", \"重要なポイント3\"],\n")
-	content.WriteString("  \"category\": \"カテゴリ（技術/ビジネス/ニュース等）\",\n")
-	content.WriteString("  \"confidence\": 0.85\n")
-	content.WriteString("}\n\n")
-	
-	content.WriteString("記事情報：\n")
-	content.WriteString(fmt.Sprintf("タイトル: %s\n", req.Title))
-	content.WriteString(fmt.Sprintf("URL: %s\n", req.Link))
-	
-	if req.Description != "" {
-		content.WriteString(fmt.Sprintf("説明: %s\n", req.Description))
-	}
-	
-	if req.Content != "" {
-		content.WriteString(fmt.Sprintf("内容: %s\n", req.Content))
-	}
-
-	return content.String()
-}
-
-// parseResponse parses the Gemini API response
-func (c *Client) parseResponse(responseText string) *SummarizeResponse {
-	// Try to extract JSON from the response
-	start := strings.Index(responseText, "{")
-	end := strings.LastIndex(responseText, "}") + 1
-	
-	if start == -1 || end <= start {
-		// Fallback: create a simple summary
-		return &SummarizeResponse{
-			Summary:     responseText,
-			KeyPoints:   []string{},
-			Category:    "未分類",
-			Confidence:  0.5,
-			ProcessedAt: time.Now(),
-		}
-	}
-
-	jsonStr := responseText[start:end]
-	
-	var response struct {
-		Summary    string   `json:"summary"`
-		KeyPoints  []string `json:"key_points"`
-		Category   string   `json:"category"`
-		Confidence float64  `json:"confidence"`
-	}
-
-	if err := json.Unmarshal([]byte(jsonStr), &response); err != nil {
-		// Fallback: create a simple summary
-		return &SummarizeResponse{
-			Summary:     responseText,
-			KeyPoints:   []string{},
-			Category:    "未分類",
-			Confidence:  0.5,
-			ProcessedAt: time.Now(),
-		}
-	}
-
-	return &SummarizeResponse{
-		Summary:     response.Summary,
-		KeyPoints:   response.KeyPoints,
-		Category:    response.Category,
-		Confidence:  response.Confidence,
-		ProcessedAt: time.Now(),
-	}
+	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
 }
 
 // ConvertRSSItemToRequest converts an RSS item to a summarization request
@@ -243,16 +286,6 @@ func ConvertRSSItemToRequest(item rss.Item) SummarizeRequest {
 		Title:       item.Title,
 		Link:        item.Link,
 		Description: item.Description,
-		Content:     "", // Content will be fetched separately if needed
+		Content:     "", // Content will be fetched separately
 	}
-}
-
-// SummarizeRSSItems is a convenience function to summarize RSS items
-func (c *Client) SummarizeRSSItems(ctx context.Context, items []rss.Item, maxConcurrent int) ([]SummarizeResponse, []error) {
-	requests := make([]SummarizeRequest, len(items))
-	for i, item := range items {
-		requests[i] = ConvertRSSItemToRequest(item)
-	}
-	
-	return c.SummarizeMultipleArticles(ctx, requests, maxConcurrent)
 }

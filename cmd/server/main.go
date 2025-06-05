@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/robfig/cron/v3"
 	"github.com/pep299/article-summarizer-v3/internal/config"
 	"github.com/pep299/article-summarizer-v3/internal/handlers"
 )
@@ -32,38 +33,47 @@ func main() {
 
 	// Create HTTP server
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
-		Handler: router,
+		Addr:         fmt.Sprintf("%s:%s", cfg.Host, cfg.Port),
+		Handler:      router,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start periodic RSS processing
+	// Setup individual RSS feed processing with cron scheduler (v1 style)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go func() {
-		ticker := time.NewTicker(time.Duration(cfg.UpdateInterval) * time.Minute)
-		defer ticker.Stop()
+	// Create cron scheduler
+	c := cron.New()
 
-		// Run initial processing
-		if err := server.ProcessAndNotify(ctx); err != nil {
-			log.Printf("Initial RSS processing failed: %v", err)
+	// Schedule each RSS feed individually with different timing
+	for feedName, feedConfig := range cfg.RSSFeeds {
+		if !feedConfig.Enabled {
+			log.Printf("Skipping disabled feed: %s", feedName)
+			continue
 		}
 
-		// Run periodic processing
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := server.ProcessAndNotify(ctx); err != nil {
-					log.Printf("RSS processing failed: %v", err)
-				}
+		feedName := feedName // capture for closure
+		_, err := c.AddFunc(feedConfig.Schedule, func() {
+			log.Printf("🕐 Scheduled execution starting for %s", feedName)
+			if err := server.ProcessSingleFeed(ctx, feedName); err != nil {
+				log.Printf("❌ Scheduled processing failed for %s: %v", feedName, err)
+			} else {
+				log.Printf("✅ Scheduled processing completed for %s", feedName)
 			}
+		})
+
+		if err != nil {
+			log.Printf("❌ Failed to schedule feed %s: %v", feedName, err)
+		} else {
+			log.Printf("📅 Scheduled feed %s with cron: %s", feedConfig.Name, feedConfig.Schedule)
 		}
-	}()
+	}
+
+	// Start cron scheduler
+	c.Start()
+	defer c.Stop()
 
 	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -71,7 +81,7 @@ func main() {
 
 	// Start server
 	go func() {
-		log.Printf("Starting server on %s:%s", cfg.Host, cfg.Port)
+		log.Printf("🚀 Starting server on %s:%s", cfg.Host, cfg.Port)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed to start: %v", err)
 		}
@@ -79,10 +89,13 @@ func main() {
 
 	// Wait for shutdown signal
 	<-sigChan
-	log.Println("Shutting down server...")
+	log.Println("🛑 Shutting down server...")
 
 	// Cancel background tasks
 	cancel()
+
+	// Stop cron scheduler
+	c.Stop()
 
 	// Shutdown HTTP server
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -92,5 +105,5 @@ func main() {
 		log.Printf("Server shutdown error: %v", err)
 	}
 
-	log.Println("Server stopped")
+	log.Println("✅ Server stopped")
 }

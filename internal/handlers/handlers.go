@@ -6,81 +6,59 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/pep299/article-summarizer-v3/internal/gemini"
 	"github.com/pep299/article-summarizer-v3/internal/rss"
 	"github.com/pep299/article-summarizer-v3/internal/slack"
 )
 
-// fetchRSSHandler fetches RSS feeds
+// fetchRSSHandler fetches RSS feeds for a specific feed
 func (s *Server) fetchRSSHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	
-	feeds, errors := s.rssClient.FetchMultipleFeeds(ctx, s.config.RSSFeeds)
-	
-	response := map[string]interface{}{
-		"feeds":  feeds,
-		"errors": errors,
-		"count":  len(feeds),
+	vars := mux.Vars(r)
+	feedName := vars["feed"]
+
+	feedConfig, exists := s.config.RSSFeeds[feedName]
+	if !exists {
+		http.Error(w, fmt.Sprintf("Feed %s not found", feedName), http.StatusNotFound)
+		return
 	}
-	
+
+	articles, err := s.rssClient.FetchFeed(ctx, feedConfig.Name, feedConfig.URL)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching feed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"feed":     feedConfig.Name,
+		"articles": articles,
+		"count":    len(articles),
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-// processRSSHandler processes RSS feeds and creates summaries
+// processRSSHandler processes RSS feeds and creates summaries for a specific feed
 func (s *Server) processRSSHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	
-	// Fetch RSS feeds
-	feeds, feedErrors := s.rssClient.FetchMultipleFeeds(ctx, s.config.RSSFeeds)
-	
-	var allItems []rss.Item
-	for _, feed := range feeds {
-		allItems = append(allItems, feed.Items...)
-	}
-	
-	// Remove duplicates
-	uniqueItems := rss.GetUniqueItems(allItems)
-	
-	// Apply filters
-	filterOptions := rss.FilterOptions{
-		ExcludeCategories: []string{"ask"},  // Exclude Lobsters "ask" category
-		MaxAge:            24 * time.Hour,   // Only articles from last 24 hours
-		MinTitleLength:    10,               // Minimum title length
-	}
-	filteredItems := rss.FilterItems(uniqueItems, filterOptions)
-	
-	// Filter cached items
-	uncachedItems, err := s.cacheManager.FilterCached(ctx, filteredItems)
+	vars := mux.Vars(r)
+	feedName := vars["feed"]
+
+	err := s.ProcessSingleFeed(ctx, feedName)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error filtering cached items: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Error processing feed: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
-	// Summarize uncached items
-	summaries, summaryErrors := s.geminiClient.SummarizeRSSItems(ctx, uncachedItems, s.config.MaxConcurrentRequests)
-	
-	// Cache new summaries
-	for i, item := range uncachedItems {
-		if summaryErrors[i] == nil {
-			s.cacheManager.SetSummary(ctx, item, summaries[i])
-		}
-	}
-	
-	// Get all cached summaries (including newly created ones)
-	cachedSummaries, _ := s.cacheManager.GetCachedSummaries(ctx, filteredItems)
-	
+
 	response := map[string]interface{}{
-		"processed_items":   len(uncachedItems),
-		"total_items":       len(uniqueItems),
-		"filtered_items":    len(filteredItems),
-		"cached_summaries":  len(cachedSummaries),
-		"feed_errors":       feedErrors,
-		"summary_errors":    summaryErrors,
+		"status": "success",
+		"feed":   feedName,
+		"message": "Feed processed successfully",
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -88,55 +66,35 @@ func (s *Server) processRSSHandler(w http.ResponseWriter, r *http.Request) {
 // createSummaryHandler creates a summary for a single article
 func (s *Server) createSummaryHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	
-	var req gemini.SummarizeRequest
+
+	var req struct {
+		URL string `json:"url"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	
-	summary, err := s.geminiClient.SummarizeArticle(ctx, req)
+
+	summary, err := s.geminiClient.SummarizeURL(ctx, req.URL)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error creating summary: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(summary)
-}
-
-// batchSummaryHandler creates summaries for multiple articles
-func (s *Server) batchSummaryHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	
-	var requests []gemini.SummarizeRequest
-	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	
-	summaries, errors := s.geminiClient.SummarizeMultipleArticles(ctx, requests, s.config.MaxConcurrentRequests)
-	
-	response := map[string]interface{}{
-		"summaries": summaries,
-		"errors":    errors,
-		"count":     len(summaries),
-	}
-	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
 }
 
 // cacheStatsHandler returns cache statistics
 func (s *Server) cacheStatsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	
+
 	stats, err := s.cacheManager.GetStats(ctx)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error getting cache stats: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
 }
@@ -144,17 +102,17 @@ func (s *Server) cacheStatsHandler(w http.ResponseWriter, r *http.Request) {
 // cacheClearHandler clears the cache
 func (s *Server) cacheClearHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	
+
 	if err := s.cacheManager.Clear(ctx); err != nil {
 		http.Error(w, fmt.Sprintf("Error clearing cache: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	response := map[string]string{
 		"status":  "success",
 		"message": "Cache cleared successfully",
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -162,83 +120,81 @@ func (s *Server) cacheClearHandler(w http.ResponseWriter, r *http.Request) {
 // notifySlackHandler sends a notification to Slack
 func (s *Server) notifySlackHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	
+
 	var req struct {
 		Message string `json:"message"`
 	}
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	
+
 	if err := s.slackClient.SendSimpleMessage(ctx, req.Message); err != nil {
 		http.Error(w, fmt.Sprintf("Error sending Slack message: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
+
 	response := map[string]string{
 		"status":  "success",
 		"message": "Slack notification sent",
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-// webhookSummarizeHandler handles webhook requests for summarization
+// webhookSummarizeHandler handles webhook requests for summarization (v1 style)
 func (s *Server) webhookSummarizeHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	
+
 	var req struct {
-		URL         string `json:"url"`
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		SendToSlack bool   `json:"send_to_slack"`
+		URL     string `json:"url"`
+		Channel string `json:"channel,omitempty"`
 	}
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	
-	// Create summarization request
-	summarizeReq := gemini.SummarizeRequest{
-		Title:       req.Title,
-		Link:        req.URL,
-		Description: req.Description,
+
+	if req.URL == "" {
+		http.Error(w, "URL parameter is required", http.StatusBadRequest)
+		return
 	}
-	
-	// Generate summary
-	summary, err := s.geminiClient.SummarizeArticle(ctx, summarizeReq)
+
+	// Generate summary using on-demand prompt
+	summary, err := s.geminiClient.SummarizeURLForOnDemand(ctx, req.URL)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error creating summary: %v", err), http.StatusInternalServerError)
 		return
 	}
-	
-	// Send to Slack if requested
-	if req.SendToSlack {
-		rssItem := rss.Item{
-			Title:       req.Title,
-			Link:        req.URL,
-			Description: req.Description,
-		}
-		
-		articleSummary := slack.ArticleSummary{
-			RSS:     rssItem,
-			Summary: *summary,
-		}
-		
-		if err := s.slackClient.SendArticleSummary(ctx, articleSummary); err != nil {
-			log.Printf("Error sending to Slack: %v", err)
-		}
+
+	// Create article structure for Slack notification
+	article := rss.Item{
+		Title: "", // Title will be extracted by Gemini or left empty
+		Link:  req.URL,
+		Source: "ondemand",
 	}
-	
+
+	// Determine target channel
+	targetChannel := req.Channel
+	if targetChannel == "" {
+		targetChannel = s.config.WebhookSlackChannel
+	}
+
+	// Send to Slack
+	if err := s.slackClient.SendOnDemandSummary(ctx, article, *summary, targetChannel); err != nil {
+		log.Printf("Error sending to Slack: %v", err)
+	}
+
 	response := map[string]interface{}{
-		"summary":      summary,
-		"sent_to_slack": req.SendToSlack,
+		"status":        "success",
+		"summary":       summary,
+		"sent_to_slack": true,
+		"channel":       targetChannel,
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -246,18 +202,17 @@ func (s *Server) webhookSummarizeHandler(w http.ResponseWriter, r *http.Request)
 // statusHandler returns system status
 func (s *Server) statusHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	
+
 	// Get cache stats
 	cacheStats, _ := s.cacheManager.GetStats(ctx)
-	
+
 	response := map[string]interface{}{
 		"status":     "running",
 		"version":    "v3.0.0",
-		"timestamp":  r.Context().Value("timestamp"),
 		"cache":      cacheStats,
 		"rss_feeds":  len(s.config.RSSFeeds),
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -266,17 +221,16 @@ func (s *Server) statusHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) configHandler(w http.ResponseWriter, r *http.Request) {
 	// Return sanitized configuration without sensitive data
 	response := map[string]interface{}{
-		"port":                    s.config.Port,
-		"host":                    s.config.Host,
-		"gemini_model":            s.config.GeminiModel,
-		"slack_channel":           s.config.SlackChannel,
-		"rss_feeds":               s.config.RSSFeeds,
-		"update_interval_minutes": s.config.UpdateInterval,
-		"cache_type":              s.config.CacheType,
-		"cache_duration_hours":    s.config.CacheDuration,
-		"max_concurrent_requests": s.config.MaxConcurrentRequests,
+		"port":                       s.config.Port,
+		"host":                       s.config.Host,
+		"gemini_model":               s.config.GeminiModel,
+		"slack_channel":              s.config.SlackChannel,
+		"webhook_slack_channel":      s.config.WebhookSlackChannel,
+		"rss_feeds":                  s.config.RSSFeeds,
+		"cache_type":                 s.config.CacheType,
+		"cache_duration_hours":       s.config.CacheDuration,
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }

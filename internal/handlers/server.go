@@ -37,7 +37,7 @@ func NewServer(cfg *config.Config) (*Server, error) {
 		config:       cfg,
 		rssClient:    rss.NewClient(),
 		geminiClient: gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiModel),
-		slackClient:  slack.NewClient(cfg.SlackWebhookURL, cfg.SlackChannel),
+		slackClient:  slack.NewClient(cfg.SlackBotToken, cfg.SlackChannel),
 		cacheManager: cacheManager,
 	}, nil
 }
@@ -55,12 +55,11 @@ func (s *Server) SetupRoutes() *mux.Router {
 	api.HandleFunc("/health", s.healthHandler).Methods("GET")
 	
 	// RSS operations
-	api.HandleFunc("/rss/fetch", s.fetchRSSHandler).Methods("GET")
-	api.HandleFunc("/rss/process", s.processRSSHandler).Methods("POST")
+	api.HandleFunc("/rss/fetch/{feed}", s.fetchRSSHandler).Methods("GET")
+	api.HandleFunc("/rss/process/{feed}", s.processRSSHandler).Methods("POST")
 	
 	// Summary operations
 	api.HandleFunc("/summary", s.createSummaryHandler).Methods("POST")
-	api.HandleFunc("/summary/batch", s.batchSummaryHandler).Methods("POST")
 	
 	// Cache operations
 	api.HandleFunc("/cache/stats", s.cacheStatsHandler).Methods("GET")
@@ -69,7 +68,7 @@ func (s *Server) SetupRoutes() *mux.Router {
 	// Slack operations
 	api.HandleFunc("/slack/notify", s.notifySlackHandler).Methods("POST")
 	
-	// Webhook endpoint
+	// Webhook endpoint (on-demand summarization)
 	api.HandleFunc("/webhook/summarize", s.webhookSummarizeHandler).Methods("POST")
 	
 	// Status and configuration
@@ -91,84 +90,103 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// ProcessAndNotify processes RSS feeds and sends notifications to Slack
-func (s *Server) ProcessAndNotify(ctx context.Context) error {
-	log.Println("Starting RSS processing and notification...")
-	
-	// Fetch RSS feeds
-	feeds, feedErrors := s.rssClient.FetchMultipleFeeds(ctx, s.config.RSSFeeds)
-	
-	if len(feedErrors) > 0 {
-		log.Printf("RSS feed errors: %v", feedErrors)
+// ProcessSingleFeed processes a single RSS feed (v1 style: sync processing)
+func (s *Server) ProcessSingleFeed(ctx context.Context, feedName string) error {
+	feedConfig, exists := s.config.RSSFeeds[feedName]
+	if !exists {
+		return fmt.Errorf("feed %s not found", feedName)
 	}
-	
-	// Collect all items
-	var allItems []rss.Item
-	for _, feed := range feeds {
-		allItems = append(allItems, feed.Items...)
-	}
-	
-	// Remove duplicates
-	uniqueItems := rss.GetUniqueItems(allItems)
-	log.Printf("Found %d unique articles", len(uniqueItems))
 
-	// Apply filters
-	filterOptions := rss.FilterOptions{
-		ExcludeCategories: []string{"ask"},  // Exclude Lobsters "ask" category
-		MaxAge:            24 * time.Hour,   // Only articles from last 24 hours
-		MinTitleLength:    10,               // Minimum title length
-	}
-	filteredItems := rss.FilterItems(uniqueItems, filterOptions)
-	log.Printf("After filtering: %d articles remain", len(filteredItems))
-
-	// Filter out cached items
-	uncachedItems, err := s.cacheManager.FilterCached(ctx, filteredItems)
-	if err != nil {
-		return fmt.Errorf("filtering cached items: %w", err)
-	}
-	
-	log.Printf("Processing %d new articles", len(uncachedItems))
-	
-	if len(uncachedItems) == 0 {
-		log.Println("No new articles to process")
+	if !feedConfig.Enabled {
+		log.Printf("Feed %s is disabled, skipping", feedName)
 		return nil
 	}
-	
-	// Summarize uncached items
-	summaries, summaryErrors := s.geminiClient.SummarizeRSSItems(ctx, uncachedItems, s.config.MaxConcurrentRequests)
-	
-	// Cache new summaries and prepare Slack notifications
-	var articleSummaries []slack.ArticleSummary
+
+	log.Printf("📡 RSS取得開始: %s", feedConfig.Name)
+
+	// 1. RSS記事取得 (sync, no concurrency)
+	articles, err := s.rssClient.FetchFeed(ctx, feedConfig.Name, feedConfig.URL)
+	if err != nil {
+		return fmt.Errorf("fetching RSS feed %s: %w", feedName, err)
+	}
+
+	log.Printf("📄 %d件の記事を取得: %s", len(articles), feedConfig.Name)
+
+	if len(articles) == 0 {
+		log.Printf("📋 新着記事はありませんでした: %s", feedConfig.Name)
+		return nil
+	}
+
+	// 2. 重複除去
+	uniqueArticles := rss.GetUniqueItems(articles)
+	log.Printf("Found %d unique articles from %s", len(uniqueArticles), feedConfig.Name)
+
+	// 3. フィルタリング (only remove "ask" category)
+	filteredArticles := rss.FilterItems(uniqueArticles)
+	log.Printf("After filtering: %d articles remain from %s", len(filteredArticles), feedConfig.Name)
+
+	// 4. キャッシュチェック（既に処理済みを除外）
+	uncachedArticles := []rss.Item{}
+	for _, article := range filteredArticles {
+		cached, err := s.cacheManager.IsCached(ctx, article)
+		if err != nil {
+			log.Printf("Error checking cache for %s: %v", article.Title, err)
+			continue
+		}
+		if !cached {
+			uncachedArticles = append(uncachedArticles, article)
+		}
+	}
+
+	log.Printf("Processing %d new articles from %s", len(uncachedArticles), feedConfig.Name)
+
+	if len(uncachedArticles) == 0 {
+		log.Printf("✅ 新着記事はありません: %s", feedConfig.Name)
+		return nil
+	}
+
+	// 5. 各記事を同期処理（v1 style: 1つずつ処理）
 	successCount := 0
-	
-	for i, item := range uncachedItems {
-		if summaryErrors[i] == nil {
-			// Cache the summary
-			if err := s.cacheManager.SetSummary(ctx, item, summaries[i]); err != nil {
-				log.Printf("Error caching summary for %s: %v", item.Title, err)
-			}
-			
-			// Prepare for Slack notification
-			articleSummaries = append(articleSummaries, slack.ArticleSummary{
-				RSS:     item,
-				Summary: summaries[i],
-			})
+	for _, article := range uncachedArticles {
+		if err := s.processArticle(ctx, article); err != nil {
+			log.Printf("❌ 記事処理エラー (%s): %v", article.Title, err)
+		} else {
 			successCount++
-		} else {
-			log.Printf("Error summarizing %s: %v", item.Title, summaryErrors[i])
 		}
 	}
-	
-	// Send notifications to Slack
-	if len(articleSummaries) > 0 {
-		if err := s.slackClient.SendMultipleSummaries(ctx, articleSummaries); err != nil {
-			log.Printf("Error sending Slack notifications: %v", err)
-		} else {
-			log.Printf("Sent %d article summaries to Slack", len(articleSummaries))
-		}
+
+	log.Printf("🎉 %s処理完了: %d/%d件成功", feedConfig.Name, successCount, len(uncachedArticles))
+	return nil
+}
+
+// processArticle processes a single article (sync, like v1)
+func (s *Server) processArticle(ctx context.Context, article rss.Item) error {
+	startTime := time.Now()
+	log.Printf("🔍 記事処理開始: %s", article.Title)
+
+	// Gemini APIで要約 (sync)
+	summary, err := s.geminiClient.SummarizeURL(ctx, article.Link)
+	if err != nil {
+		return fmt.Errorf("summarizing article: %w", err)
 	}
-	
-	log.Printf("Processing complete: %d successful, %d errors", successCount, len(uncachedItems)-successCount)
+
+	// キャッシュに保存
+	if err := s.cacheManager.SetSummary(ctx, article, *summary); err != nil {
+		log.Printf("Error caching summary for %s: %v", article.Title, err)
+	}
+
+	// Slack通知 (1件ずつ)
+	articleSummary := slack.ArticleSummary{
+		RSS:     article,
+		Summary: *summary,
+	}
+
+	if err := s.slackClient.SendArticleSummary(ctx, articleSummary); err != nil {
+		return fmt.Errorf("sending Slack notification: %w", err)
+	}
+
+	duration := time.Since(startTime)
+	log.Printf("✅ 記事処理完了: %s (所要時間: %v)", article.Title, duration)
 	return nil
 }
 
