@@ -5,9 +5,14 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
+	"cloud.google.com/go/storage"
+	"google.golang.org/api/iterator"
 	"github.com/pep299/article-summarizer-v3/internal/gemini"
 	"github.com/pep299/article-summarizer-v3/internal/rss"
 )
@@ -68,6 +73,226 @@ func NewMemoryCache(duration time.Duration) *MemoryCache {
 	go cache.cleanup()
 	
 	return cache
+}
+
+// CloudStorageCache implements cache using Google Cloud Storage with JSON format
+type CloudStorageCache struct {
+	client     *storage.Client
+	bucketName string
+	duration   time.Duration
+	prefix     string
+}
+
+// NewCloudStorageCache creates a new Cloud Storage cache
+func NewCloudStorageCache(duration time.Duration) (*CloudStorageCache, error) {
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating storage client: %w", err)
+	}
+
+	// Get bucket name from environment (default: article-summarizer-cache)
+	bucketName := "article-summarizer-cache"
+	if env := os.Getenv("CACHE_BUCKET"); env != "" {
+		bucketName = env
+	}
+
+	return &CloudStorageCache{
+		client:     client,
+		bucketName: bucketName,
+		duration:   duration,
+		prefix:     "cache/",
+	}, nil
+}
+
+// Get retrieves an entry from Cloud Storage
+func (c *CloudStorageCache) Get(ctx context.Context, key string) (*CacheEntry, error) {
+	objectName := c.prefix + key + ".json"
+	obj := c.client.Bucket(c.bucketName).Object(objectName)
+
+	reader, err := obj.NewReader(ctx)
+	if err != nil {
+		if err == storage.ErrObjectNotExist {
+			return nil, ErrCacheMiss
+		}
+		return nil, fmt.Errorf("opening object reader: %w", err)
+	}
+	defer reader.Close()
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("reading object data: %w", err)
+	}
+
+	var entry CacheEntry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return nil, fmt.Errorf("unmarshaling cache entry: %w", err)
+	}
+
+	// Check if expired
+	if time.Now().After(entry.ExpiresAt) {
+		// Delete expired entry
+		if err := c.Delete(ctx, key); err != nil {
+			// Log error but don't fail the request
+			fmt.Printf("Warning: failed to delete expired cache entry %s: %v\n", key, err)
+		}
+		return nil, ErrCacheMiss
+	}
+
+	// Update access information
+	entry.AccessedAt = time.Now()
+	entry.AccessCount++
+
+	// Save updated entry back to storage (optional, for statistics)
+	go func() {
+		// Use background context to avoid timeout issues
+		bgCtx := context.Background()
+		if err := c.Set(bgCtx, key, &entry); err != nil {
+			fmt.Printf("Warning: failed to update cache entry access info: %v\n", err)
+		}
+	}()
+
+	return &entry, nil
+}
+
+// Set stores an entry in Cloud Storage
+func (c *CloudStorageCache) Set(ctx context.Context, key string, entry *CacheEntry) error {
+	objectName := c.prefix + key + ".json"
+	obj := c.client.Bucket(c.bucketName).Object(objectName)
+
+	now := time.Now()
+	entry.Key = key
+	if entry.CreatedAt.IsZero() {
+		entry.CreatedAt = now
+	}
+	entry.ExpiresAt = now.Add(c.duration)
+	if entry.AccessedAt.IsZero() {
+		entry.AccessedAt = now
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("marshaling cache entry: %w", err)
+	}
+
+	writer := obj.NewWriter(ctx)
+	writer.ContentType = "application/json"
+	
+	if _, err := writer.Write(data); err != nil {
+		writer.Close()
+		return fmt.Errorf("writing object data: %w", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("closing object writer: %w", err)
+	}
+
+	return nil
+}
+
+// Delete removes an entry from Cloud Storage
+func (c *CloudStorageCache) Delete(ctx context.Context, key string) error {
+	objectName := c.prefix + key + ".json"
+	obj := c.client.Bucket(c.bucketName).Object(objectName)
+
+	if err := obj.Delete(ctx); err != nil && err != storage.ErrObjectNotExist {
+		return fmt.Errorf("deleting object: %w", err)
+	}
+
+	return nil
+}
+
+// Exists checks if an entry exists in Cloud Storage
+func (c *CloudStorageCache) Exists(ctx context.Context, key string) (bool, error) {
+	objectName := c.prefix + key + ".json"
+	obj := c.client.Bucket(c.bucketName).Object(objectName)
+
+	attrs, err := obj.Attrs(ctx)
+	if err != nil {
+		if err == storage.ErrObjectNotExist {
+			return false, nil
+		}
+		return false, fmt.Errorf("getting object attributes: %w", err)
+	}
+
+	// Check if we can infer expiration from metadata (not implemented for simplicity)
+	// For now, we assume the object exists and is valid
+	_ = attrs
+	return true, nil
+}
+
+// Clear removes all entries from Cloud Storage with the cache prefix
+func (c *CloudStorageCache) Clear(ctx context.Context) error {
+	bucket := c.client.Bucket(c.bucketName)
+	
+	// List all objects with cache prefix
+	it := bucket.Objects(ctx, &storage.Query{Prefix: c.prefix})
+	
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("listing objects: %w", err)
+		}
+
+		// Delete object
+		if err := bucket.Object(attrs.Name).Delete(ctx); err != nil {
+			return fmt.Errorf("deleting object %s: %w", attrs.Name, err)
+		}
+	}
+
+	return nil
+}
+
+// GetStats returns cache statistics for Cloud Storage
+func (c *CloudStorageCache) GetStats(ctx context.Context) (*Stats, error) {
+	bucket := c.client.Bucket(c.bucketName)
+	it := bucket.Objects(ctx, &storage.Query{Prefix: c.prefix})
+
+	stats := &Stats{
+		HitCount:  0, // Not tracked in Cloud Storage implementation
+		MissCount: 0, // Not tracked in Cloud Storage implementation
+		HitRate:   0, // Not tracked in Cloud Storage implementation
+	}
+
+	var totalSize int64
+	var oldestTime time.Time
+	var totalAge time.Duration
+	now := time.Now()
+
+	for {
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("listing objects: %w", err)
+		}
+
+		stats.TotalEntries++
+		totalSize += attrs.Size
+
+		if oldestTime.IsZero() || attrs.Created.Before(oldestTime) {
+			oldestTime = attrs.Created
+		}
+
+		totalAge += now.Sub(attrs.Created)
+	}
+
+	stats.MemoryUsage = totalSize
+	stats.OldestEntry = oldestTime
+	if stats.TotalEntries > 0 {
+		stats.AverageAge = totalAge / time.Duration(stats.TotalEntries)
+	}
+
+	return stats, nil
+}
+
+// Close closes the Cloud Storage client
+func (c *CloudStorageCache) Close() error {
+	return c.client.Close()
 }
 
 // Get retrieves an entry from cache
@@ -265,6 +490,12 @@ func NewManager(cacheType string, duration time.Duration) (*Manager, error) {
 	switch cacheType {
 	case "memory":
 		cache = NewMemoryCache(duration)
+	case "cloud-storage":
+		var err error
+		cache, err = NewCloudStorageCache(duration)
+		if err != nil {
+			return nil, fmt.Errorf("creating cloud storage cache: %w", err)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported cache type: %s", cacheType)
 	}

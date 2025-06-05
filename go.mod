@@ -3,10 +3,13 @@ module github.com/pep299/article-summarizer-v3
 go 1.21
 
 require (
+	github.com/GoogleCloudPlatform/functions-framework-go v1.8.1
 	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.8.4
+	cloud.google.com/go/storage v1.36.0
+	google.golang.org/api v0.153.0
 )
 
 require (

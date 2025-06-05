@@ -1,0 +1,45 @@
+info:
+  title: Cloud Storage Template
+  description: Template for creating Cloud Storage buckets
+
+required:
+- name
+
+properties:
+  name:
+    type: string
+    description: Name of the storage bucket
+  location:
+    type: string
+    description: Location for the bucket
+    default: us-central1
+  storageClass:
+    type: string
+    description: Storage class for the bucket
+    default: STANDARD
+  versioning:
+    type: boolean
+    description: Enable versioning
+    default: false
+
+resources:
+- name: {{ env["name"] }}-bucket
+  type: gcp-types/storage-v1:buckets
+  properties:
+    name: {{ properties["name"] }}
+    location: {{ properties["location"] }}
+    storageClass: {{ properties["storageClass"] }}
+    versioning:
+      enabled: {{ properties["versioning"] }}
+    lifecycle:
+      rule:
+      - action:
+          type: Delete
+        condition:
+          age: 30  # Delete cache entries older than 30 days
+          
+outputs:
+- name: name
+  value: $(ref.{{ env["name"] }}-bucket.name)
+- name: url
+  value: gs://$(ref.{{ env["name"] }}-bucket.name)

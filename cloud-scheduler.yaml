@@ -1,0 +1,57 @@
+info:
+  title: Cloud Scheduler Template
+  description: Template for creating Cloud Scheduler jobs
+
+required:
+- name
+- schedule
+- targetFunction
+
+properties:
+  name:
+    type: string
+    description: Name of the scheduler job
+  schedule:
+    type: string
+    description: Cron schedule for the job
+  targetFunction:
+    type: string
+    description: Target Cloud Function HTTPS URL
+  payload:
+    type: object
+    description: JSON payload to send to the function
+    default: {}
+  timezone:
+    type: string
+    description: Timezone for the schedule
+    default: UTC
+  retryCount:
+    type: integer
+    description: Number of retry attempts
+    default: 3
+
+resources:
+- name: {{ env["name"] }}-job
+  type: gcp-types/cloudscheduler-v1:projects.locations.jobs
+  properties:
+    parent: projects/{{ env["project"] }}/locations/us-central1
+    name: {{ properties["name"] }}
+    schedule: {{ properties["schedule"] }}
+    timeZone: {{ properties["timezone"] }}
+    httpTarget:
+      uri: {{ properties["targetFunction"] }}
+      httpMethod: POST
+      headers:
+        Content-Type: application/json
+        Authorization: Bearer $(gcloud auth print-access-token)
+      body: {{ properties["payload"] | base64encode }}
+    retryConfig:
+      retryCount: {{ properties["retryCount"] }}
+      maxRetryDuration: 300s
+      minBackoffDuration: 5s
+      maxBackoffDuration: 3600s
+      maxDoublings: 16
+      
+outputs:
+- name: name
+  value: $(ref.{{ env["name"] }}-job.name)

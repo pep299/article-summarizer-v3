@@ -1,0 +1,41 @@
+imports:
+- path: cloud-function.yaml
+- path: cloud-scheduler.yaml
+- path: cloud-storage.yaml
+
+resources:
+- name: article-summarizer-deployment
+  type: cloud-function.yaml
+  properties:
+    name: article-summarizer-v3
+    location: us-central1
+    runtime: go121
+    entryPoint: SummarizeArticles
+    environmentVariables:
+      CACHE_TYPE: cloud-storage
+      CACHE_BUCKET: $(ref.article-summarizer-cache.name)
+      CACHE_DURATION: "24"
+      
+- name: article-summarizer-cache
+  type: cloud-storage.yaml
+  properties:
+    name: article-summarizer-cache
+    location: us-central1
+    
+- name: rss-scheduler-hatena
+  type: cloud-scheduler.yaml
+  properties:
+    name: rss-scheduler-hatena
+    schedule: "0 */3 * * *"  # Every 3 hours
+    targetFunction: $(ref.article-summarizer-deployment.httpsUrl)
+    payload:
+      feedName: hatena
+      
+- name: rss-scheduler-lobsters
+  type: cloud-scheduler.yaml
+  properties:
+    name: rss-scheduler-lobsters
+    schedule: "30 */4 * * *"  # Every 4 hours, offset by 30 minutes
+    targetFunction: $(ref.article-summarizer-deployment.httpsUrl)
+    payload:
+      feedName: lobsters
