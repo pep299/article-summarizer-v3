@@ -56,141 +56,50 @@ func TestGetUniqueItems(t *testing.T) {
 }
 
 func TestFilterItems(t *testing.T) {
-	now := time.Now()
 	items := []Item{
 		{
-			Title:      "Ask Question",
-			Category:   []string{"ask"},
-			ParsedDate: now.Add(-1 * time.Hour),
+			Title:    "Ask Question",
+			Category: []string{"ask"},
 		},
 		{
-			Title:      "Valid Article",
-			Category:   []string{"tech"},
-			ParsedDate: now.Add(-1 * time.Hour),
+			Title:    "Valid Article",
+			Category: []string{"tech"},
 		},
 		{
-			Title:      "Old Article",
-			Category:   []string{"tech"},
-			ParsedDate: now.Add(-25 * time.Hour),
+			Title:    "Another Valid Article",
+			Category: []string{"programming"},
 		},
 		{
-			Title: "Short", // Too short
+			Title:    "Ask HN: Question",
+			Category: []string{"ask", "hn"},
 		},
 	}
 
-	options := FilterOptions{
-		ExcludeCategories: []string{"ask"},
-		MaxAge:            24 * time.Hour,
-		MinTitleLength:    10,
+	filtered := FilterItems(items)
+
+	if len(filtered) != 2 {
+		t.Errorf("Expected 2 filtered items, got %d", len(filtered))
 	}
 
-	filtered := FilterItems(items, options)
-
-	if len(filtered) != 1 {
-		t.Errorf("Expected 1 filtered item, got %d", len(filtered))
-	}
-
-	if filtered[0].Title != "Valid Article" {
-		t.Errorf("Expected 'Valid Article', got '%s'", filtered[0].Title)
-	}
-}
-
-func TestShouldIncludeItem(t *testing.T) {
-	now := time.Now()
-	
-	tests := []struct {
-		name     string
-		item     Item
-		options  FilterOptions
-		expected bool
-	}{
-		{
-			name: "valid item",
-			item: Item{
-				Title:      "Valid Article Title",
-				Category:   []string{"tech"},
-				ParsedDate: now.Add(-1 * time.Hour),
-			},
-			options: FilterOptions{
-				ExcludeCategories: []string{"ask"},
-				MaxAge:            24 * time.Hour,
-				MinTitleLength:    10,
-			},
-			expected: true,
-		},
-		{
-			name: "excluded category",
-			item: Item{
-				Title:      "Ask Question Title",
-				Category:   []string{"ask"},
-				ParsedDate: now.Add(-1 * time.Hour),
-			},
-			options: FilterOptions{
-				ExcludeCategories: []string{"ask"},
-				MaxAge:            24 * time.Hour,
-				MinTitleLength:    10,
-			},
-			expected: false,
-		},
-		{
-			name: "too old",
-			item: Item{
-				Title:      "Old Article Title",
-				Category:   []string{"tech"},
-				ParsedDate: now.Add(-25 * time.Hour),
-			},
-			options: FilterOptions{
-				ExcludeCategories: []string{"ask"},
-				MaxAge:            24 * time.Hour,
-				MinTitleLength:    10,
-			},
-			expected: false,
-		},
-		{
-			name: "title too short",
-			item: Item{
-				Title:      "Short",
-				Category:   []string{"tech"},
-				ParsedDate: now.Add(-1 * time.Hour),
-			},
-			options: FilterOptions{
-				ExcludeCategories: []string{"ask"},
-				MaxAge:            24 * time.Hour,
-				MinTitleLength:    10,
-			},
-			expected: false,
-		},
-		{
-			name: "excluded keyword in title",
-			item: Item{
-				Title:       "Article about spam content",
-				Description: "Valid description",
-			},
-			options: FilterOptions{
-				ExcludeKeywords: []string{"spam"},
-			},
-			expected: false,
-		},
-		{
-			name: "excluded keyword in description",
-			item: Item{
-				Title:       "Valid title",
-				Description: "This is spam content",
-			},
-			options: FilterOptions{
-				ExcludeKeywords: []string{"spam"},
-			},
-			expected: false,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			result := shouldIncludeItem(test.item, test.options)
-			if result != test.expected {
-				t.Errorf("Expected %v, got %v", test.expected, result)
+	// Check that "ask" category items were filtered out
+	for _, item := range filtered {
+		for _, category := range item.Category {
+			if strings.EqualFold(category, "ask") {
+				t.Errorf("Found item with 'ask' category that should have been filtered: %s", item.Title)
 			}
-		})
+		}
+	}
+
+	// Check that valid articles remain
+	validFound := false
+	for _, item := range filtered {
+		if item.Title == "Valid Article" {
+			validFound = true
+			break
+		}
+	}
+	if !validFound {
+		t.Error("Expected 'Valid Article' to remain after filtering")
 	}
 }
 
@@ -209,39 +118,180 @@ func TestNewClient(t *testing.T) {
 		t.Error("Expected non-empty user agent")
 	}
 	
-	if !strings.Contains(client.userAgent, "article-summarizer-v3") {
-		t.Errorf("Expected user agent to contain 'article-summarizer-v3', got '%s'", client.userAgent)
+	if !strings.Contains(client.userAgent, "Article Summarizer Bot") {
+		t.Errorf("Expected user agent to contain 'Article Summarizer Bot', got '%s'", client.userAgent)
 	}
 }
 
-func TestFetchMultipleFeedsWithLimit(t *testing.T) {
+func TestFetchFeedErrorHandling(t *testing.T) {
 	client := NewClient()
 	ctx := context.Background()
 	
-	// Test with invalid URLs to check error handling
-	urls := []string{
-		"invalid-url",
-		"http://nonexistent.example.com/rss",
+	// Test with invalid URL to check error handling
+	_, err := client.FetchFeed(ctx, "test", "invalid-url")
+	if err == nil {
+		t.Error("Expected error for invalid URL")
 	}
 	
-	feeds, errors := client.FetchMultipleFeedsWithLimit(ctx, urls, 2)
+	// Test with non-existent URL
+	_, err = client.FetchFeed(ctx, "test", "http://nonexistent.example.com/rss")
+	if err == nil {
+		t.Error("Expected error for non-existent URL")
+	}
+}
+
+func TestParseRSSXML(t *testing.T) {
+	client := NewClient()
 	
-	if len(feeds) != 0 {
-		t.Errorf("Expected 0 successful feeds, got %d", len(feeds))
+	// Test RSS 2.0 format
+	rss20XML := `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+	<channel>
+		<title>Test Feed</title>
+		<item>
+			<title>Test Article</title>
+			<link>http://example.com/test</link>
+			<description>Test description</description>
+			<guid>test-guid</guid>
+			<category>tech</category>
+		</item>
+	</channel>
+</rss>`
+	
+	items, err := client.parseRSSXML(rss20XML)
+	if err != nil {
+		t.Fatalf("Failed to parse RSS 2.0 XML: %v", err)
 	}
 	
-	if len(errors) != 2 {
-		t.Errorf("Expected 2 errors, got %d", len(errors))
+	if len(items) != 1 {
+		t.Errorf("Expected 1 item, got %d", len(items))
 	}
 	
-	// Test with empty URLs
-	feeds2, errors2 := client.FetchMultipleFeedsWithLimit(ctx, []string{}, 2)
-	
-	if len(feeds2) != 0 {
-		t.Errorf("Expected 0 feeds for empty URLs, got %d", len(feeds2))
+	if items[0].Title != "Test Article" {
+		t.Errorf("Expected title 'Test Article', got '%s'", items[0].Title)
 	}
 	
-	if len(errors2) != 0 {
-		t.Errorf("Expected 0 errors for empty URLs, got %d", len(errors2))
+	// Test RDF format
+	rdfXML := `<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+	<item>
+		<title>RDF Test Article</title>
+		<link>http://example.com/rdf-test</link>
+		<description>RDF test description</description>
+	</item>
+</rdf:RDF>`
+	
+	items, err = client.parseRSSXML(rdfXML)
+	if err != nil {
+		t.Fatalf("Failed to parse RDF XML: %v", err)
+	}
+	
+	if len(items) != 1 {
+		t.Errorf("Expected 1 item from RDF, got %d", len(items))
+	}
+	
+	if items[0].Title != "RDF Test Article" {
+		t.Errorf("Expected title 'RDF Test Article', got '%s'", items[0].Title)
+	}
+	
+	// Test invalid XML
+	_, err = client.parseRSSXML("invalid xml content")
+	if err == nil {
+		t.Error("Expected error for invalid XML")
+	}
+}
+
+func TestGenerateKey(t *testing.T) {
+	tests := []struct {
+		name string
+		item Item
+	}{
+		{
+			name: "with GUID",
+			item: Item{
+				Title: "Test Article",
+				Link:  "http://example.com/test",
+				GUID:  "test-guid",
+			},
+		},
+		{
+			name: "without GUID",
+			item: Item{
+				Title: "Test Article",
+				Link:  "http://example.com/test",
+				GUID:  "",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			key := GenerateKey(test.item)
+			
+			if key == "" {
+				t.Error("Expected non-empty key")
+			}
+			
+			if !strings.HasPrefix(key, "article:") {
+				t.Errorf("Expected key to start with 'article:', got '%s'", key)
+			}
+			
+			// Key should be consistent for the same item
+			key2 := GenerateKey(test.item)
+			if key != key2 {
+				t.Errorf("Expected consistent key generation, got '%s' and '%s'", key, key2)
+			}
+		})
+	}
+}
+
+func TestExtractTextFromHTML(t *testing.T) {
+	client := NewClient()
+	
+	html := `<html>
+	<head>
+		<title>Test Page</title>
+		<script>console.log('test');</script>
+		<style>body { color: red; }</style>
+	</head>
+	<body>
+		<h1>Main Title</h1>
+		<p>This is a paragraph with <strong>bold text</strong>.</p>
+		<div>Another div with content.</div>
+		<script>alert('should be removed');</script>
+	</body>
+</html>`
+	
+	text := client.extractTextFromHTML(html)
+	
+	// Should contain main content
+	if !strings.Contains(text, "Main Title") {
+		t.Error("Expected extracted text to contain 'Main Title'")
+	}
+	
+	if !strings.Contains(text, "This is a paragraph") {
+		t.Error("Expected extracted text to contain paragraph content")
+	}
+	
+	if !strings.Contains(text, "bold text") {
+		t.Error("Expected extracted text to contain 'bold text'")
+	}
+	
+	// Should not contain script or style content
+	if strings.Contains(text, "console.log") {
+		t.Error("Expected extracted text to not contain script content")
+	}
+	
+	if strings.Contains(text, "color: red") {
+		t.Error("Expected extracted text to not contain style content")
+	}
+	
+	if strings.Contains(text, "alert") {
+		t.Error("Expected extracted text to not contain script content")
+	}
+	
+	// Should not contain HTML tags
+	if strings.Contains(text, "<h1>") || strings.Contains(text, "</h1>") {
+		t.Error("Expected extracted text to not contain HTML tags")
 	}
 }
