@@ -111,9 +111,18 @@ func (s *Server) ProcessAndNotify(ctx context.Context) error {
 	// Remove duplicates
 	uniqueItems := rss.GetUniqueItems(allItems)
 	log.Printf("Found %d unique articles", len(uniqueItems))
-	
+
+	// Apply filters
+	filterOptions := rss.FilterOptions{
+		ExcludeCategories: []string{"ask"},  // Exclude Lobsters "ask" category
+		MaxAge:            24 * time.Hour,   // Only articles from last 24 hours
+		MinTitleLength:    10,               // Minimum title length
+	}
+	filteredItems := rss.FilterItems(uniqueItems, filterOptions)
+	log.Printf("After filtering: %d articles remain", len(filteredItems))
+
 	// Filter out cached items
-	uncachedItems, err := s.cacheManager.FilterCached(ctx, uniqueItems)
+	uncachedItems, err := s.cacheManager.FilterCached(ctx, filteredItems)
 	if err != nil {
 		return fmt.Errorf("filtering cached items: %w", err)
 	}

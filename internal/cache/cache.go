@@ -20,6 +20,7 @@ type Cache interface {
 	Exists(ctx context.Context, key string) (bool, error)
 	Clear(ctx context.Context) error
 	GetStats(ctx context.Context) (*Stats, error)
+	Close() error
 }
 
 // CacheEntry represents a cached item
@@ -47,18 +48,20 @@ type Stats struct {
 
 // MemoryCache implements in-memory cache
 type MemoryCache struct {
-	entries   map[string]*CacheEntry
-	mutex     sync.RWMutex
-	duration  time.Duration
-	hitCount  int64
-	missCount int64
+	entries     map[string]*CacheEntry
+	mutex       sync.RWMutex
+	duration    time.Duration
+	hitCount    int64
+	missCount   int64
+	stopCleanup chan struct{}
 }
 
 // NewMemoryCache creates a new in-memory cache
 func NewMemoryCache(duration time.Duration) *MemoryCache {
 	cache := &MemoryCache{
-		entries:  make(map[string]*CacheEntry),
-		duration: duration,
+		entries:     make(map[string]*CacheEntry),
+		duration:    duration,
+		stopCleanup: make(chan struct{}),
 	}
 	
 	// Start cleanup goroutine
@@ -69,24 +72,47 @@ func NewMemoryCache(duration time.Duration) *MemoryCache {
 
 // Get retrieves an entry from cache
 func (c *MemoryCache) Get(ctx context.Context, key string) (*CacheEntry, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	
+	// First check with read lock
+	c.mutex.RLock()
 	entry, exists := c.entries[key]
 	if !exists {
+		c.mutex.RUnlock()
+		c.mutex.Lock()
 		c.missCount++
+		c.mutex.Unlock()
 		return nil, ErrCacheMiss
 	}
 	
 	// Check if expired
-	if time.Now().After(entry.ExpiresAt) {
-		delete(c.entries, key)
+	now := time.Now()
+	if now.After(entry.ExpiresAt) {
+		c.mutex.RUnlock()
+		// Need write lock to delete expired entry
+		c.mutex.Lock()
+		// Double-check after acquiring write lock
+		if entry, exists := c.entries[key]; exists && now.After(entry.ExpiresAt) {
+			delete(c.entries, key)
+		}
+		c.missCount++
+		c.mutex.Unlock()
+		return nil, ErrCacheMiss
+	}
+	
+	c.mutex.RUnlock()
+	
+	// Need write lock to update access information
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	
+	// Double-check entry still exists after re-acquiring lock
+	entry, exists = c.entries[key]
+	if !exists || now.After(entry.ExpiresAt) {
 		c.missCount++
 		return nil, ErrCacheMiss
 	}
 	
 	// Update access information
-	entry.AccessedAt = time.Now()
+	entry.AccessedAt = now
 	entry.AccessCount++
 	c.hitCount++
 	
@@ -98,10 +124,11 @@ func (c *MemoryCache) Set(ctx context.Context, key string, entry *CacheEntry) er
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	
+	now := time.Now()
 	entry.Key = key
-	entry.CreatedAt = time.Now()
-	entry.ExpiresAt = time.Now().Add(c.duration)
-	entry.AccessedAt = time.Now()
+	entry.CreatedAt = now
+	entry.ExpiresAt = now.Add(c.duration)
+	entry.AccessedAt = now
 	entry.AccessCount = 0
 	
 	c.entries[key] = entry
@@ -161,10 +188,9 @@ func (c *MemoryCache) GetStats(ctx context.Context) (*Stats, error) {
 		stats.HitRate = float64(c.hitCount) / float64(c.hitCount+c.missCount)
 	}
 	
-	// Calculate memory usage (rough estimate)
+	// Calculate memory usage estimate
 	for _, entry := range c.entries {
-		data, _ := json.Marshal(entry)
-		stats.MemoryUsage += int64(len(data))
+		stats.MemoryUsage += estimateMemoryUsage(entry)
 	}
 	
 	// Find oldest entry and calculate average age
@@ -198,8 +224,13 @@ func (c *MemoryCache) cleanup() {
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
 	
-	for range ticker.C {
-		c.cleanupExpired()
+	for {
+		select {
+		case <-c.stopCleanup:
+			return
+		case <-ticker.C:
+			c.cleanupExpired()
+		}
 	}
 }
 
@@ -214,6 +245,12 @@ func (c *MemoryCache) cleanupExpired() {
 			delete(c.entries, key)
 		}
 	}
+}
+
+// Close stops the cleanup goroutine and closes the cache
+func (c *MemoryCache) Close() error {
+	close(c.stopCleanup)
+	return nil
 }
 
 // Manager handles cache operations with convenience methods
@@ -308,6 +345,11 @@ func (m *Manager) Clear(ctx context.Context) error {
 	return m.cache.Clear(ctx)
 }
 
+// Close closes the cache and stops background goroutines
+func (m *Manager) Close() error {
+	return m.cache.Close()
+}
+
 // GenerateKey generates a cache key for an RSS item
 func GenerateKey(item rss.Item) string {
 	// Use GUID if available, otherwise use link
@@ -319,6 +361,23 @@ func GenerateKey(item rss.Item) string {
 	// Create MD5 hash for consistent key length
 	hash := md5.Sum([]byte(identifier))
 	return fmt.Sprintf("article:%x", hash)
+}
+
+// estimateMemoryUsage estimates memory usage of a cache entry without JSON marshaling
+func estimateMemoryUsage(entry *CacheEntry) int64 {
+	size := int64(len(entry.Key))
+	size += int64(len(entry.RSS.Title) + len(entry.RSS.Link) + len(entry.RSS.Description) + len(entry.RSS.GUID))
+	size += int64(len(entry.Summary.Summary) + len(entry.Summary.KeyPoints))
+	
+	// Add estimated overhead for struct fields and slices
+	size += 128 // rough estimate for time.Time fields and other overhead
+	
+	// Add memory for categories and key points
+	for _, category := range entry.RSS.Category {
+		size += int64(len(category))
+	}
+	
+	return size
 }
 
 // Common cache errors

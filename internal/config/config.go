@@ -64,6 +64,18 @@ func (c *Config) validate() error {
 	if c.SlackWebhookURL == "" {
 		return &ConfigError{Field: "SLACK_WEBHOOK_URL", Message: "Slack webhook URL is required"}
 	}
+	if c.UpdateInterval <= 0 {
+		return &ConfigError{Field: "UPDATE_INTERVAL_MINUTES", Message: "must be positive"}
+	}
+	if c.CacheDuration <= 0 {
+		return &ConfigError{Field: "CACHE_DURATION_HOURS", Message: "must be positive"}
+	}
+	if len(c.RSSFeeds) == 0 {
+		return &ConfigError{Field: "RSS_FEEDS", Message: "at least one feed required"}
+	}
+	if c.MaxConcurrentRequests <= 0 {
+		return &ConfigError{Field: "MAX_CONCURRENT_REQUESTS", Message: "must be positive"}
+	}
 	return nil
 }
 

@@ -87,8 +87,14 @@ func (c *Client) FetchFeed(ctx context.Context, url string) (*Feed, error) {
 	return &feed, nil
 }
 
-// FetchMultipleFeeds fetches multiple RSS feeds concurrently
+// FetchMultipleFeeds fetches multiple RSS feeds concurrently with rate limiting
 func (c *Client) FetchMultipleFeeds(ctx context.Context, urls []string) (map[string]*Feed, map[string]error) {
+	const maxConcurrent = 5 // Default max concurrent requests
+	return c.FetchMultipleFeedsWithLimit(ctx, urls, maxConcurrent)
+}
+
+// FetchMultipleFeedsWithLimit fetches multiple RSS feeds concurrently with specified concurrency limit
+func (c *Client) FetchMultipleFeedsWithLimit(ctx context.Context, urls []string, maxConcurrent int) (map[string]*Feed, map[string]error) {
 	type result struct {
 		url  string
 		feed *Feed
@@ -96,10 +102,15 @@ func (c *Client) FetchMultipleFeeds(ctx context.Context, urls []string) (map[str
 	}
 
 	results := make(chan result, len(urls))
+	semaphore := make(chan struct{}, maxConcurrent)
 	
-	// Start goroutines for each feed
+	// Start goroutines for each feed with rate limiting
 	for _, url := range urls {
 		go func(u string) {
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }() // Release semaphore
+			
 			feed, err := c.FetchFeed(ctx, u)
 			results <- result{url: u, feed: feed, err: err}
 		}(url)

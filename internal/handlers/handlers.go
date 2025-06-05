@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/pep299/article-summarizer-v3/internal/gemini"
 	"github.com/pep299/article-summarizer-v3/internal/rss"
@@ -43,8 +44,16 @@ func (s *Server) processRSSHandler(w http.ResponseWriter, r *http.Request) {
 	// Remove duplicates
 	uniqueItems := rss.GetUniqueItems(allItems)
 	
+	// Apply filters
+	filterOptions := rss.FilterOptions{
+		ExcludeCategories: []string{"ask"},  // Exclude Lobsters "ask" category
+		MaxAge:            24 * time.Hour,   // Only articles from last 24 hours
+		MinTitleLength:    10,               // Minimum title length
+	}
+	filteredItems := rss.FilterItems(uniqueItems, filterOptions)
+	
 	// Filter cached items
-	uncachedItems, err := s.cacheManager.FilterCached(ctx, uniqueItems)
+	uncachedItems, err := s.cacheManager.FilterCached(ctx, filteredItems)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error filtering cached items: %v", err), http.StatusInternalServerError)
 		return
@@ -61,14 +70,15 @@ func (s *Server) processRSSHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	// Get all cached summaries (including newly created ones)
-	cachedSummaries, _ := s.cacheManager.GetCachedSummaries(ctx, uniqueItems)
+	cachedSummaries, _ := s.cacheManager.GetCachedSummaries(ctx, filteredItems)
 	
 	response := map[string]interface{}{
 		"processed_items":   len(uncachedItems),
-		"total_items":      len(uniqueItems),
-		"cached_summaries": len(cachedSummaries),
-		"feed_errors":      feedErrors,
-		"summary_errors":   summaryErrors,
+		"total_items":       len(uniqueItems),
+		"filtered_items":    len(filteredItems),
+		"cached_summaries":  len(cachedSummaries),
+		"feed_errors":       feedErrors,
+		"summary_errors":    summaryErrors,
 	}
 	
 	w.Header().Set("Content-Type", "application/json")
