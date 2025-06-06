@@ -2,13 +2,10 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/pep299/article-summarizer-v3/internal/cache"
 	"github.com/pep299/article-summarizer-v3/internal/config"
 	"github.com/pep299/article-summarizer-v3/internal/gemini"
@@ -16,7 +13,7 @@ import (
 	"github.com/pep299/article-summarizer-v3/internal/slack"
 )
 
-// Server holds the HTTP server and its dependencies
+// Server holds the dependencies for RSS processing
 type Server struct {
 	config       *config.Config
 	rssClient    *rss.Client
@@ -25,7 +22,7 @@ type Server struct {
 	cacheManager *cache.Manager
 }
 
-// NewServer creates a new HTTP server
+// NewServer creates a new server instance
 func NewServer(cfg *config.Config) (*Server, error) {
 	// Initialize cache manager
 	cacheManager, err := cache.NewManager(cfg.CacheType, time.Duration(cfg.CacheDuration)*time.Hour)
@@ -40,54 +37,6 @@ func NewServer(cfg *config.Config) (*Server, error) {
 		slackClient:  slack.NewClient(cfg.SlackBotToken, cfg.SlackChannel),
 		cacheManager: cacheManager,
 	}, nil
-}
-
-// SetupRoutes configures HTTP routes
-func (s *Server) SetupRoutes() *mux.Router {
-	r := mux.NewRouter()
-
-	// API routes
-	api := r.PathPrefix("/api/v1").Subrouter()
-	api.Use(s.corsMiddleware)
-	api.Use(s.loggingMiddleware)
-
-	// Health check
-	api.HandleFunc("/health", s.healthHandler).Methods("GET")
-
-	// RSS operations
-	api.HandleFunc("/rss/fetch/{feed}", s.fetchRSSHandler).Methods("GET")
-	api.HandleFunc("/rss/process/{feed}", s.processRSSHandler).Methods("POST")
-
-	// Summary operations
-	api.HandleFunc("/summary", s.createSummaryHandler).Methods("POST")
-
-	// Cache operations
-	api.HandleFunc("/cache/stats", s.cacheStatsHandler).Methods("GET")
-	api.HandleFunc("/cache/clear", s.cacheClearHandler).Methods("DELETE")
-
-	// Slack operations
-	api.HandleFunc("/slack/notify", s.notifySlackHandler).Methods("POST")
-
-	// Webhook endpoint (on-demand summarization)
-	api.HandleFunc("/webhook/summarize", s.webhookSummarizeHandler).Methods("POST")
-
-	// Status and configuration
-	api.HandleFunc("/status", s.statusHandler).Methods("GET")
-	api.HandleFunc("/config", s.configHandler).Methods("GET")
-
-	return r
-}
-
-// healthHandler provides health check endpoint
-func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
-	response := map[string]interface{}{
-		"status":    "ok",
-		"timestamp": time.Now().Unix(),
-		"version":   "v3.0.0",
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
 }
 
 // ProcessSingleFeed processes a single RSS feed (v1 style: sync processing)
@@ -188,48 +137,4 @@ func (s *Server) processArticle(ctx context.Context, article rss.Item) error {
 	duration := time.Since(startTime)
 	log.Printf("✅ 記事処理完了: %s (所要時間: %v)", article.Title, duration)
 	return nil
-}
-
-// Middleware functions
-
-// corsMiddleware adds CORS headers
-func (s *Server) corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-// loggingMiddleware logs HTTP requests
-func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
-		// Wrap the ResponseWriter to capture status code
-		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-
-		next.ServeHTTP(wrapped, r)
-
-		duration := time.Since(start)
-		log.Printf("%s %s %d %v", r.Method, r.URL.Path, wrapped.statusCode, duration)
-	})
-}
-
-// responseWriter wraps http.ResponseWriter to capture status code
-type responseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (rw *responseWriter) WriteHeader(code int) {
-	rw.statusCode = code
-	rw.ResponseWriter.WriteHeader(code)
 }

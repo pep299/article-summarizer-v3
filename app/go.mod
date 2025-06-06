@@ -5,9 +5,7 @@ go 1.21
 require (
 	cloud.google.com/go/storage v1.36.0
 	github.com/GoogleCloudPlatform/functions-framework-go v1.8.1
-	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
-	github.com/robfig/cron/v3 v3.0.1
 	google.golang.org/api v0.153.0
 )
 

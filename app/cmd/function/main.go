@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
+	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/pep299/article-summarizer-v3/internal/config"
 	"github.com/pep299/article-summarizer-v3/internal/handlers"
 )
@@ -23,6 +24,8 @@ func init() {
 
 // SummarizeArticles is the HTTP function for webhook requests and manual triggers
 func SummarizeArticles(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -39,9 +42,45 @@ func SummarizeArticles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Setup routes and delegate to existing handler
-	router := server.SetupRoutes()
-	router.ServeHTTP(w, r)
+	// Simple path-based routing
+	switch r.URL.Path {
+	case "/health":
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":    "ok",
+			"timestamp": time.Now().Unix(),
+			"version":   "v3.0.0",
+		})
+		
+	case "/process":
+		// Get feed name from query parameter
+		feedName := r.URL.Query().Get("feed")
+		if feedName == "" {
+			http.Error(w, "Missing 'feed' query parameter", http.StatusBadRequest)
+			return
+		}
+		
+		// Process the specific RSS feed
+		log.Printf("🕐 Processing RSS feed via HTTP: %s", feedName)
+		if err := server.ProcessSingleFeed(ctx, feedName); err != nil {
+			log.Printf("❌ Failed to process feed %s: %v", feedName, err)
+			http.Error(w, fmt.Sprintf("Failed to process feed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		
+		log.Printf("✅ Successfully processed RSS feed via HTTP: %s", feedName)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "success",
+			"feed":   feedName,
+			"message": "Feed processed successfully",
+		})
+		
+	default:
+		http.NotFound(w, r)
+	}
 }
 
 // CloudEventData represents the data structure for Cloud Scheduler events
@@ -50,7 +89,7 @@ type CloudEventData struct {
 }
 
 // ProcessRSSScheduled processes RSS feeds triggered by Cloud Scheduler
-func ProcessRSSScheduled(ctx context.Context, e CloudEvent) error {
+func ProcessRSSScheduled(ctx context.Context, e event.Event) error {
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -65,7 +104,7 @@ func ProcessRSSScheduled(ctx context.Context, e CloudEvent) error {
 
 	// Parse the Cloud Event data
 	var data CloudEventData
-	if err := json.Unmarshal(e.Data, &data); err != nil {
+	if err := json.Unmarshal(e.Data(), &data); err != nil {
 		return fmt.Errorf("failed to parse event data: %w", err)
 	}
 
@@ -93,18 +132,6 @@ func ProcessRSSScheduled(ctx context.Context, e CloudEvent) error {
 	return nil
 }
 
-// CloudEvent represents a Cloud Function event
-type CloudEvent struct {
-	ID              string                 `json:"id"`
-	Source          string                 `json:"source"`
-	SpecVersion     string                 `json:"specversion"`
-	Type            string                 `json:"type"`
-	Subject         string                 `json:"subject"`
-	Time            time.Time              `json:"time"`
-	DataContentType string                 `json:"datacontenttype"`
-	Data            json.RawMessage        `json:"data"`
-	Extensions      map[string]interface{} `json:"extensions"`
-}
 
 func main() {
 	// This main function is required for Cloud Functions
