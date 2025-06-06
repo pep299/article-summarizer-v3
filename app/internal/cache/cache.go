@@ -56,6 +56,7 @@ type MemoryCache struct {
 	hitCount    int64
 	missCount   int64
 	stopCleanup chan struct{}
+	closed      bool
 }
 
 // NewMemoryCache creates a new in-memory cache
@@ -399,6 +400,14 @@ func (c *MemoryCache) cleanup() {
 
 // Close stops the cleanup goroutine and closes the cache
 func (c *MemoryCache) Close() error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	
+	if c.closed {
+		return nil // Already closed
+	}
+	
+	c.closed = true
 	close(c.stopCleanup)
 	return nil
 }

@@ -13,13 +13,34 @@ import (
 	"github.com/pep299/article-summarizer-v3/internal/slack"
 )
 
+// Interfaces for dependency injection and testing
+type RSSClient interface {
+	FetchFeed(ctx context.Context, feedName, url string) ([]rss.Item, error)
+}
+
+type GeminiClient interface {
+	SummarizeURL(ctx context.Context, url string) (*gemini.SummarizeResponse, error)
+}
+
+type SlackClient interface {
+	SendArticleSummary(ctx context.Context, summary slack.ArticleSummary) error
+}
+
+type CacheManager interface {
+	IsCached(ctx context.Context, item rss.Item) (bool, error)
+	MarkAsProcessed(ctx context.Context, item rss.Item) error
+	GetStats(ctx context.Context) (*cache.Stats, error)
+	Clear(ctx context.Context) error
+	Close() error
+}
+
 // Server holds the dependencies for RSS processing
 type Server struct {
 	config       *config.Config
-	rssClient    *rss.Client
-	geminiClient *gemini.Client
-	slackClient  *slack.Client
-	cacheManager *cache.Manager
+	rssClient    RSSClient
+	geminiClient GeminiClient
+	slackClient  SlackClient
+	cacheManager CacheManager
 }
 
 // NewServer creates a new server instance
@@ -37,6 +58,17 @@ func NewServer(cfg *config.Config) (*Server, error) {
 		slackClient:  slack.NewClient(cfg.SlackBotToken, cfg.SlackChannel),
 		cacheManager: cacheManager,
 	}, nil
+}
+
+// NewServerWithDeps creates a new server instance with provided dependencies (for testing)
+func NewServerWithDeps(cfg *config.Config, rssClient RSSClient, geminiClient GeminiClient, slackClient SlackClient, cacheManager CacheManager) *Server {
+	return &Server{
+		config:       cfg,
+		rssClient:    rssClient,
+		geminiClient: geminiClient,
+		slackClient:  slackClient,
+		cacheManager: cacheManager,
+	}
 }
 
 // ProcessSingleFeed processes a single RSS feed (v1 style: sync processing)
@@ -79,8 +111,7 @@ func (s *Server) ProcessSingleFeed(ctx context.Context, feedName string) error {
 	for _, article := range filteredArticles {
 		cached, err := s.cacheManager.IsCached(ctx, article)
 		if err != nil {
-			log.Printf("Error checking cache for %s: %v", article.Title, err)
-			continue
+			return fmt.Errorf("checking cache for article %s: %w", article.Title, err)
 		}
 		if !cached {
 			uncachedArticles = append(uncachedArticles, article)
@@ -95,16 +126,13 @@ func (s *Server) ProcessSingleFeed(ctx context.Context, feedName string) error {
 	}
 
 	// 5. 各記事を同期処理（v1 style: 1つずつ処理）
-	successCount := 0
 	for _, article := range uncachedArticles {
 		if err := s.processArticle(ctx, article); err != nil {
-			log.Printf("❌ 記事処理エラー (%s): %v", article.Title, err)
-		} else {
-			successCount++
+			return fmt.Errorf("processing article %s: %w", article.Title, err)
 		}
 	}
 
-	log.Printf("🎉 %s処理完了: %d/%d件成功", feedConfig.Name, successCount, len(uncachedArticles))
+	log.Printf("🎉 %s処理完了: %d件成功", feedConfig.Name, len(uncachedArticles))
 	return nil
 }
 
@@ -131,10 +159,25 @@ func (s *Server) processArticle(ctx context.Context, article rss.Item) error {
 
 	// Slack通知成功後にキャッシュに保存
 	if err := s.cacheManager.MarkAsProcessed(ctx, article); err != nil {
-		log.Printf("Error caching article for %s: %v", article.Title, err)
+		return fmt.Errorf("caching article: %w", err)
 	}
 
 	duration := time.Since(startTime)
 	log.Printf("✅ 記事処理完了: %s (所要時間: %v)", article.Title, duration)
 	return nil
+}
+
+// GetStats returns cache statistics
+func (s *Server) GetStats(ctx context.Context) (*cache.Stats, error) {
+	return s.cacheManager.GetStats(ctx)
+}
+
+// Clear clears all cached entries
+func (s *Server) Clear(ctx context.Context) error {
+	return s.cacheManager.Clear(ctx)
+}
+
+// Close closes the server and cleans up resources
+func (s *Server) Close() error {
+	return s.cacheManager.Close()
 }

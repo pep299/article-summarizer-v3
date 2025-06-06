@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
 	"github.com/cloudevents/sdk-go/v2/event"
@@ -44,15 +43,6 @@ func SummarizeArticles(w http.ResponseWriter, r *http.Request) {
 
 	// Simple path-based routing
 	switch r.URL.Path {
-	case "/health":
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":    "ok",
-			"timestamp": time.Now().Unix(),
-			"version":   "v3.0.0",
-		})
-		
 	case "/process":
 		// Get feed name from query parameter
 		feedName := r.URL.Query().Get("feed")
