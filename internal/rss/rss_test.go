@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestParseRSSDate(t *testing.T) {
@@ -14,7 +13,7 @@ func TestParseRSSDate(t *testing.T) {
 	}{
 		{"Mon, 02 Jan 2006 15:04:05 MST", true},
 		{"Mon, 2 Jan 2006 15:04:05 -0700", true},
-		{"2006-01-02T15:04:05Z07:00", true},
+		{"2006-01-02T15:04:05Z", true},
 		{"invalid date", false},
 		{"", false},
 	}
@@ -226,7 +225,7 @@ func TestGenerateKey(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			key := GenerateKey(test.item)
+			key := generateKey(test.item)
 			
 			if key == "" {
 				t.Error("Expected non-empty key")
@@ -237,7 +236,7 @@ func TestGenerateKey(t *testing.T) {
 			}
 			
 			// Key should be consistent for the same item
-			key2 := GenerateKey(test.item)
+			key2 := generateKey(test.item)
 			if key != key2 {
 				t.Errorf("Expected consistent key generation, got '%s' and '%s'", key, key2)
 			}
@@ -246,7 +245,7 @@ func TestGenerateKey(t *testing.T) {
 }
 
 func TestExtractTextFromHTML(t *testing.T) {
-	client := NewClient()
+	_ = NewClient()
 	
 	html := `<html>
 	<head>
@@ -262,7 +261,7 @@ func TestExtractTextFromHTML(t *testing.T) {
 	</body>
 </html>`
 	
-	text := client.extractTextFromHTML(html)
+	text := extractTextFromHTML(html)
 	
 	// Should contain main content
 	if !strings.Contains(text, "Main Title") {

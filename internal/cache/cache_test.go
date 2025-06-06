@@ -25,8 +25,7 @@ func TestMemoryCache(t *testing.T) {
 		},
 		Summary: gemini.SummarizeResponse{
 			Summary:   "Test summary",
-			KeyPoints: "Test key points",
-		},
+					},
 	}
 
 	err := cache.Set(ctx, "test-key", entry)
@@ -276,8 +275,7 @@ func TestCacheManager(t *testing.T) {
 
 	summary := gemini.SummarizeResponse{
 		Summary:   "Test summary",
-		KeyPoints: "Test key points",
-	}
+			}
 
 	// Test SetSummary and GetSummary
 	err = manager.SetSummary(ctx, item, summary)
@@ -383,7 +381,6 @@ func TestEstimateMemoryUsage(t *testing.T) {
 		},
 		Summary: gemini.SummarizeResponse{
 			Summary:   "Test summary content",
-			KeyPoints: "Test key points",
 		},
 	}
 
@@ -395,8 +392,7 @@ func TestEstimateMemoryUsage(t *testing.T) {
 	
 	// Should include at least the length of strings
 	minExpected := int64(len(entry.Key) + len(entry.RSS.Title) + len(entry.RSS.Link) + 
-		len(entry.RSS.Description) + len(entry.RSS.GUID) + len(entry.Summary.Summary) + 
-		len(entry.Summary.KeyPoints))
+		len(entry.RSS.Description) + len(entry.RSS.GUID) + len(entry.Summary.Summary))
 	
 	for _, category := range entry.RSS.Category {
 		minExpected += int64(len(category))
@@ -435,8 +431,7 @@ func TestCloudStorageCache(t *testing.T) {
 		},
 		Summary: gemini.SummarizeResponse{
 			Summary:   "Test summary",
-			KeyPoints: "Test key points",
-		},
+					},
 	}
 	
 	err = cache.Set(ctx, "test-key", entry)
@@ -613,8 +608,7 @@ func TestCacheManagerCloudStorage(t *testing.T) {
 	
 	summary := gemini.SummarizeResponse{
 		Summary:   "Test summary",
-		KeyPoints: "Test key points",
-	}
+			}
 	
 	// Test SetSummary and GetSummary
 	err = manager.SetSummary(ctx, item, summary)

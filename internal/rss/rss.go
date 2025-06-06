@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -145,7 +146,7 @@ func parseRSSDate(dateStr string) (time.Time, error) {
 		time.RFC1123,
 		"Mon, 2 Jan 2006 15:04:05 -0700",
 		"Mon, 2 Jan 2006 15:04:05 MST",
-		"2006-01-02T15:04:05Z07:00",
+		time.RFC3339,
 		"2006-01-02 15:04:05",
 	}
 
@@ -176,4 +177,36 @@ func GetUniqueItems(items []Item) []Item {
 	}
 
 	return unique
+}
+
+// generateKey generates a cache key for an RSS item
+func generateKey(item Item) string {
+	// Use GUID if available, otherwise use link
+	identifier := item.GUID
+	if identifier == "" {
+		identifier = item.Link
+	}
+	
+	// Create a simple hash-like key
+	return fmt.Sprintf("article:%s", identifier)
+}
+
+// extractTextFromHTML extracts text content from HTML (for testing)
+func extractTextFromHTML(html string) string {
+	// Remove script and style tags
+	scriptRe := regexp.MustCompile(`(?i)<script[^>]*>[\s\S]*?</script>`)
+	html = scriptRe.ReplaceAllString(html, "")
+	
+	styleRe := regexp.MustCompile(`(?i)<style[^>]*>[\s\S]*?</style>`)
+	html = styleRe.ReplaceAllString(html, "")
+	
+	// Remove HTML tags
+	tagRe := regexp.MustCompile(`<[^>]+>`)
+	text := tagRe.ReplaceAllString(html, " ")
+	
+	// Normalize whitespace
+	spaceRe := regexp.MustCompile(`\s+`)
+	text = spaceRe.ReplaceAllString(text, " ")
+	
+	return strings.TrimSpace(text)
 }

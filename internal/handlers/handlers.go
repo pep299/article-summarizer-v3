@@ -1,16 +1,13 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/pep299/article-summarizer-v3/internal/gemini"
 	"github.com/pep299/article-summarizer-v3/internal/rss"
-	"github.com/pep299/article-summarizer-v3/internal/slack"
 )
 
 // fetchRSSHandler fetches RSS feeds for a specific feed

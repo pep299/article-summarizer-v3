@@ -61,7 +61,7 @@ func TestSendArticleSummary(t *testing.T) {
 	// Note: We can't easily test the actual API call without modifying the implementation
 	// to accept a custom base URL. For now, test the basic functionality.
 	client := NewClient("xoxb-test-token", "#test")
-	ctx := context.Background()
+	_ = context.Background()
 	
 	articleSummary := ArticleSummary{
 		RSS: rss.Item{

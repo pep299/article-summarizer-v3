@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -598,7 +597,7 @@ func GenerateKey(item rss.Item) string {
 func estimateMemoryUsage(entry *CacheEntry) int64 {
 	size := int64(len(entry.Key))
 	size += int64(len(entry.RSS.Title) + len(entry.RSS.Link) + len(entry.RSS.Description) + len(entry.RSS.GUID))
-	size += int64(len(entry.Summary.Summary) + len(entry.Summary.KeyPoints))
+	size += int64(len(entry.Summary.Summary))
 	
 	// Add estimated overhead for struct fields and slices
 	size += 128 // rough estimate for time.Time fields and other overhead
