@@ -25,7 +25,7 @@ BUILD_TIME?=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 # LDFLAGS for version info
 LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.BuildTime=$(BUILD_TIME)"
 
-.PHONY: all build clean test deps dev run-server run-cli help
+.PHONY: all build clean test deps dev run-server run-cli help test-unit test-integration test-functions test-cache test-short test-verbose test-bench
 
 # Default target
 all: clean deps test build
@@ -66,6 +66,85 @@ test-coverage:
 test-race:
 	@echo "Running tests with race detection..."
 	$(GOTEST) -race -v ./...
+
+# Run unit tests only (exclude integration tests)
+test-unit:
+	@echo "Running unit tests..."
+	$(GOTEST) -v -short ./internal/...
+
+# Run integration tests
+test-integration:
+	@echo "Running integration tests..."
+	$(GOTEST) -v -run TestFullServerIntegration ./...
+	$(GOTEST) -v -run TestEndToEndWorkflow ./...
+
+# Run Cloud Functions tests
+test-functions:
+	@echo "Running Cloud Functions tests..."
+	$(GOTEST) -v -run TestSummarizeArticles ./...
+	$(GOTEST) -v -run TestProcessRSSScheduled ./...
+
+# Run Cloud Storage cache tests
+test-cache:
+	@echo "Running cache tests..."
+	$(GOTEST) -v -run TestCloudStorageCache ./internal/cache/...
+	$(GOTEST) -v -run TestCacheManager ./internal/cache/...
+
+# Run short tests only (skip integration and external dependencies)
+test-short:
+	@echo "Running short tests..."
+	$(GOTEST) -v -short ./...
+
+# Run tests with verbose output
+test-verbose:
+	@echo "Running verbose tests..."
+	$(GOTEST) -v -count=1 ./...
+
+# Run benchmark tests
+test-bench:
+	@echo "Running benchmark tests..."
+	$(GOTEST) -v -bench=. -benchmem ./...
+
+# Run all tests with full coverage report
+test-full:
+	@echo "Running full test suite..."
+	$(GOTEST) -v -race -coverprofile=coverage.out -covermode=atomic ./...
+	$(GOCMD) tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+
+# Test specific components
+test-config:
+	@echo "Testing configuration..."
+	$(GOTEST) -v ./internal/config/...
+
+test-rss-unit:
+	@echo "Testing RSS functionality..."
+	$(GOTEST) -v ./internal/rss/...
+
+test-gemini-unit:
+	@echo "Testing Gemini integration..."
+	$(GOTEST) -v ./internal/gemini/...
+
+test-slack-unit:
+	@echo "Testing Slack integration..."
+	$(GOTEST) -v ./internal/slack/...
+
+test-handlers:
+	@echo "Testing HTTP handlers..."
+	$(GOTEST) -v ./internal/handlers/...
+
+# Test with timeout
+test-timeout:
+	@echo "Running tests with timeout..."
+	$(GOTEST) -v -timeout=30s ./...
+
+# Continuous testing (watch for changes)
+test-watch:
+	@echo "Running tests in watch mode..."
+	@while true; do \
+		$(GOTEST) -v -short ./...; \
+		sleep 2; \
+	done
 
 # Clean build artifacts
 clean:
@@ -160,9 +239,26 @@ help:
 	@echo "  make clean         - Clean build artifacts"
 	@echo ""
 	@echo "Testing Commands:"
-	@echo "  make test          - Run tests"
+	@echo "  make test          - Run all tests"
+	@echo "  make test-unit     - Run unit tests only"
+	@echo "  make test-integration - Run integration tests"
+	@echo "  make test-functions - Run Cloud Functions tests"
+	@echo "  make test-cache    - Run cache tests"
+	@echo "  make test-short    - Run short tests (no external deps)"
 	@echo "  make test-coverage - Run tests with coverage"
 	@echo "  make test-race     - Run tests with race detection"
+	@echo "  make test-full     - Run full test suite with coverage"
+	@echo "  make test-bench    - Run benchmark tests"
+	@echo "  make test-verbose  - Run tests with verbose output"
+	@echo "  make test-timeout  - Run tests with timeout"
+	@echo "  make test-watch    - Run tests in watch mode"
+	@echo ""
+	@echo "Component Tests:"
+	@echo "  make test-config   - Test configuration"
+	@echo "  make test-rss-unit - Test RSS functionality"
+	@echo "  make test-gemini-unit - Test Gemini integration"
+	@echo "  make test-slack-unit - Test Slack integration"
+	@echo "  make test-handlers - Test HTTP handlers"
 	@echo ""
 	@echo "Quality Commands:"
 	@echo "  make fmt           - Format code"
