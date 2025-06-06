@@ -1,4 +1,4 @@
-package cloudfunctions
+package main
 
 import (
 	"context"
@@ -104,4 +104,9 @@ type CloudEvent struct {
 	DataContentType string                 `json:"datacontenttype"`
 	Data            json.RawMessage        `json:"data"`
 	Extensions      map[string]interface{} `json:"extensions"`
+}
+
+func main() {
+	// This main function is required for Cloud Functions
+	// The actual function registration happens in init()
 }
