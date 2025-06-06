@@ -170,11 +170,6 @@ func (s *Server) processArticle(ctx context.Context, article rss.Item) error {
 		return fmt.Errorf("summarizing article: %w", err)
 	}
 
-	// キャッシュに保存
-	if err := s.cacheManager.SetSummary(ctx, article, *summary); err != nil {
-		log.Printf("Error caching summary for %s: %v", article.Title, err)
-	}
-
 	// Slack通知 (1件ずつ)
 	articleSummary := slack.ArticleSummary{
 		RSS:     article,
@@ -183,6 +178,11 @@ func (s *Server) processArticle(ctx context.Context, article rss.Item) error {
 
 	if err := s.slackClient.SendArticleSummary(ctx, articleSummary); err != nil {
 		return fmt.Errorf("sending Slack notification: %w", err)
+	}
+
+	// Slack通知成功後にキャッシュに保存
+	if err := s.cacheManager.SetSummary(ctx, article, *summary); err != nil {
+		log.Printf("Error caching summary for %s: %v", article.Title, err)
 	}
 
 	duration := time.Since(startTime)

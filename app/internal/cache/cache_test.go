@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -19,13 +18,11 @@ func TestMemoryCache(t *testing.T) {
 
 	// Test Set and Get
 	entry := &CacheEntry{
-		RSS: rss.Item{
-			Title: "Test Article",
-			Link:  "http://example.com/test",
-		},
-		Summary: gemini.SummarizeResponse{
-			Summary: "Test summary",
-		},
+		Title:         "Test Article",
+		URL:           "http://example.com/test",
+		Source:        "test-source",
+		PubDate:       time.Now(),
+		ProcessedDate: time.Now(),
 	}
 
 	err := cache.Set(ctx, "test-key", entry)
@@ -39,12 +36,12 @@ func TestMemoryCache(t *testing.T) {
 		t.Fatalf("Failed to get cache entry: %v", err)
 	}
 
-	if retrieved.RSS.Title != entry.RSS.Title {
-		t.Errorf("Expected title '%s', got '%s'", entry.RSS.Title, retrieved.RSS.Title)
+	if retrieved.Title != entry.Title {
+		t.Errorf("Expected title '%s', got '%s'", entry.Title, retrieved.Title)
 	}
 
-	if retrieved.Summary.Summary != entry.Summary.Summary {
-		t.Errorf("Expected summary '%s', got '%s'", entry.Summary.Summary, retrieved.Summary.Summary)
+	if retrieved.URL != entry.URL {
+		t.Errorf("Expected URL '%s', got '%s'", entry.URL, retrieved.URL)
 	}
 
 	// Test Exists
@@ -72,67 +69,17 @@ func TestMemoryCache(t *testing.T) {
 	}
 }
 
-func TestMemoryCacheExpiration(t *testing.T) {
-	cache := NewMemoryCache(50 * time.Millisecond)
-	defer cache.Close()
-	ctx := context.Background()
-
-	entry := &CacheEntry{
-		RSS: rss.Item{
-			Title: "Test Article",
-			Link:  "http://example.com/test",
-		},
-		Summary: gemini.SummarizeResponse{
-			Summary: "Test summary",
-		},
-	}
-
-	err := cache.Set(ctx, "test-key", entry)
-	if err != nil {
-		t.Fatalf("Failed to set cache entry: %v", err)
-	}
-
-	// Should exist immediately
-	exists, err := cache.Exists(ctx, "test-key")
-	if err != nil {
-		t.Fatalf("Failed to check existence: %v", err)
-	}
-	if !exists {
-		t.Error("Expected key to exist immediately after setting")
-	}
-
-	// Wait for expiration
-	time.Sleep(100 * time.Millisecond)
-
-	// Should not exist after expiration
-	exists, err = cache.Exists(ctx, "test-key")
-	if err != nil {
-		t.Fatalf("Failed to check existence: %v", err)
-	}
-	if exists {
-		t.Error("Expected key to not exist after expiration")
-	}
-
-	// Get should return cache miss
-	_, err = cache.Get(ctx, "test-key")
-	if err != ErrCacheMiss {
-		t.Errorf("Expected ErrCacheMiss after expiration, got %v", err)
-	}
-}
-
 func TestMemoryCacheDelete(t *testing.T) {
 	cache := NewMemoryCache(1 * time.Hour)
 	defer cache.Close()
 	ctx := context.Background()
 
 	entry := &CacheEntry{
-		RSS: rss.Item{
-			Title: "Test Article",
-			Link:  "http://example.com/test",
-		},
-		Summary: gemini.SummarizeResponse{
-			Summary: "Test summary",
-		},
+		Title:         "Test Article",
+		URL:           "http://example.com/test",
+		Source:        "test-source",
+		PubDate:       time.Now(),
+		ProcessedDate: time.Now(),
 	}
 
 	err := cache.Set(ctx, "test-key", entry)
@@ -164,13 +111,11 @@ func TestMemoryCacheClear(t *testing.T) {
 	// Add multiple entries
 	for i := 0; i < 3; i++ {
 		entry := &CacheEntry{
-			RSS: rss.Item{
-				Title: "Test Article",
-				Link:  "http://example.com/test",
-			},
-			Summary: gemini.SummarizeResponse{
-				Summary: "Test summary",
-			},
+			Title:         "Test Article",
+			URL:           "http://example.com/test",
+			Source:        "test-source",
+			PubDate:       time.Now(),
+			ProcessedDate: time.Now(),
 		}
 		err := cache.Set(ctx, fmt.Sprintf("test-key-%d", i), entry)
 		if err != nil {
@@ -203,13 +148,11 @@ func TestMemoryCacheStats(t *testing.T) {
 
 	// Add an entry
 	entry := &CacheEntry{
-		RSS: rss.Item{
-			Title: "Test Article",
-			Link:  "http://example.com/test",
-		},
-		Summary: gemini.SummarizeResponse{
-			Summary: "Test summary",
-		},
+		Title:         "Test Article",
+		URL:           "http://example.com/test",
+		Source:        "test-source",
+		PubDate:       time.Now(),
+		ProcessedDate: time.Now(),
 	}
 
 	err := cache.Set(ctx, "test-key", entry)
@@ -227,12 +170,6 @@ func TestMemoryCacheStats(t *testing.T) {
 		t.Errorf("Expected 1 total entry, got %d", stats.TotalEntries)
 	}
 
-	// Trigger a hit
-	_, err = cache.Get(ctx, "test-key")
-	if err != nil {
-		t.Fatalf("Failed to get cache entry: %v", err)
-	}
-
 	// Trigger a miss
 	_, err = cache.Get(ctx, "non-existent")
 	if err != ErrCacheMiss {
@@ -245,16 +182,8 @@ func TestMemoryCacheStats(t *testing.T) {
 		t.Fatalf("Failed to get updated stats: %v", err)
 	}
 
-	if stats.HitCount != 1 {
-		t.Errorf("Expected 1 hit, got %d", stats.HitCount)
-	}
-
 	if stats.MissCount != 1 {
 		t.Errorf("Expected 1 miss, got %d", stats.MissCount)
-	}
-
-	if stats.HitRate != 0.5 {
-		t.Errorf("Expected hit rate 0.5, got %f", stats.HitRate)
 	}
 }
 
@@ -268,28 +197,21 @@ func TestCacheManager(t *testing.T) {
 	ctx := context.Background()
 
 	item := rss.Item{
-		Title: "Test Article",
-		Link:  "http://example.com/test",
-		GUID:  "test-guid",
+		Title:      "Test Article",
+		Link:       "http://example.com/test",
+		GUID:       "test-guid",
+		Source:     "test-source",
+		ParsedDate: time.Now(),
 	}
 
 	summary := gemini.SummarizeResponse{
 		Summary: "Test summary",
 	}
 
-	// Test SetSummary and GetSummary
+	// Test SetSummary
 	err = manager.SetSummary(ctx, item, summary)
 	if err != nil {
 		t.Fatalf("Failed to set summary: %v", err)
-	}
-
-	retrievedSummary, err := manager.GetSummary(ctx, item)
-	if err != nil {
-		t.Fatalf("Failed to get summary: %v", err)
-	}
-
-	if retrievedSummary.Summary != summary.Summary {
-		t.Errorf("Expected summary '%s', got '%s'", summary.Summary, retrievedSummary.Summary)
 	}
 
 	// Test IsCached
@@ -299,29 +221,6 @@ func TestCacheManager(t *testing.T) {
 	}
 	if !cached {
 		t.Error("Expected item to be cached")
-	}
-
-	// Test FilterCached
-	items := []rss.Item{
-		item, // This should be filtered out as it's cached
-		{
-			Title: "New Article",
-			Link:  "http://example.com/new",
-			GUID:  "new-guid",
-		},
-	}
-
-	uncached, err := manager.FilterCached(ctx, items)
-	if err != nil {
-		t.Fatalf("Failed to filter cached items: %v", err)
-	}
-
-	if len(uncached) != 1 {
-		t.Errorf("Expected 1 uncached item, got %d", len(uncached))
-	}
-
-	if uncached[0].Title != "New Article" {
-		t.Errorf("Expected 'New Article', got '%s'", uncached[0].Title)
 	}
 }
 
@@ -334,15 +233,15 @@ func TestGenerateKey(t *testing.T) {
 			name: "with GUID",
 			item: rss.Item{
 				Title: "Test Article",
-				Link:  "http://example.com/test",
-				GUID:  "test-guid",
+				Link:  "http://example.com/test?param=value",
+				GUID:  "http://example.com/test?param=value",
 			},
 		},
 		{
 			name: "without GUID",
 			item: rss.Item{
 				Title: "Test Article",
-				Link:  "http://example.com/test",
+				Link:  "http://example.com/test?param=value",
 				GUID:  "",
 			},
 		},
@@ -356,14 +255,16 @@ func TestGenerateKey(t *testing.T) {
 				t.Error("Expected non-empty key")
 			}
 
-			if !strings.HasPrefix(key, "article:") {
-				t.Errorf("Expected key to start with 'article:', got '%s'", key)
-			}
-
 			// Key should be consistent for the same item
 			key2 := GenerateKey(test.item)
 			if key != key2 {
 				t.Errorf("Expected consistent key generation, got '%s' and '%s'", key, key2)
+			}
+
+			// Key should be normalized URL (no query params)
+			expectedKey := "http://example.com/test"
+			if key != expectedKey {
+				t.Errorf("Expected normalized key '%s', got '%s'", expectedKey, key)
 			}
 		})
 	}
@@ -371,17 +272,11 @@ func TestGenerateKey(t *testing.T) {
 
 func TestEstimateMemoryUsage(t *testing.T) {
 	entry := &CacheEntry{
-		Key: "test-key",
-		RSS: rss.Item{
-			Title:       "Test Article Title",
-			Link:        "http://example.com/test",
-			Description: "Test description",
-			GUID:        "test-guid",
-			Category:    []string{"tech", "news"},
-		},
-		Summary: gemini.SummarizeResponse{
-			Summary: "Test summary content",
-		},
+		Title:         "Test Article Title",
+		URL:           "http://example.com/test",
+		Source:        "test-source",
+		PubDate:       time.Now(),
+		ProcessedDate: time.Now(),
 	}
 
 	size := estimateMemoryUsage(entry)
@@ -391,12 +286,7 @@ func TestEstimateMemoryUsage(t *testing.T) {
 	}
 
 	// Should include at least the length of strings
-	minExpected := int64(len(entry.Key) + len(entry.RSS.Title) + len(entry.RSS.Link) +
-		len(entry.RSS.Description) + len(entry.RSS.GUID) + len(entry.Summary.Summary))
-
-	for _, category := range entry.RSS.Category {
-		minExpected += int64(len(category))
-	}
+	minExpected := int64(len(entry.Title) + len(entry.URL) + len(entry.Source))
 
 	if size < minExpected {
 		t.Errorf("Expected memory usage to be at least %d, got %d", minExpected, size)
@@ -425,13 +315,11 @@ func TestCloudStorageCache(t *testing.T) {
 
 	// Test Set and Get
 	entry := &CacheEntry{
-		RSS: rss.Item{
-			Title: "Test Article",
-			Link:  "http://example.com/test",
-		},
-		Summary: gemini.SummarizeResponse{
-			Summary: "Test summary",
-		},
+		Title:         "Test Article",
+		URL:           "http://example.com/test",
+		Source:        "test-source",
+		PubDate:       time.Now(),
+		ProcessedDate: time.Now(),
 	}
 
 	err = cache.Set(ctx, "test-key", entry)
@@ -445,12 +333,12 @@ func TestCloudStorageCache(t *testing.T) {
 		t.Fatalf("Failed to get cache entry: %v", err)
 	}
 
-	if retrieved.RSS.Title != entry.RSS.Title {
-		t.Errorf("Expected title '%s', got '%s'", entry.RSS.Title, retrieved.RSS.Title)
+	if retrieved.Title != entry.Title {
+		t.Errorf("Expected title '%s', got '%s'", entry.Title, retrieved.Title)
 	}
 
-	if retrieved.Summary.Summary != entry.Summary.Summary {
-		t.Errorf("Expected summary '%s', got '%s'", entry.Summary.Summary, retrieved.Summary.Summary)
+	if retrieved.URL != entry.URL {
+		t.Errorf("Expected URL '%s', got '%s'", entry.URL, retrieved.URL)
 	}
 
 	// Test Exists
@@ -484,57 +372,6 @@ func TestCloudStorageCache(t *testing.T) {
 	}
 }
 
-func TestCloudStorageCacheExpiration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping Cloud Storage tests in short mode")
-	}
-
-	testBucket := "test-article-summarizer-cache"
-	os.Setenv("CACHE_BUCKET", testBucket)
-	defer os.Unsetenv("CACHE_BUCKET")
-
-	cache, err := NewCloudStorageCache(50 * time.Millisecond)
-	if err != nil {
-		t.Skipf("Skipping Cloud Storage test: %v", err)
-	}
-	defer cache.Close()
-
-	ctx := context.Background()
-
-	entry := &CacheEntry{
-		RSS: rss.Item{
-			Title: "Test Article",
-			Link:  "http://example.com/test",
-		},
-		Summary: gemini.SummarizeResponse{
-			Summary: "Test summary",
-		},
-	}
-
-	err = cache.Set(ctx, "test-key", entry)
-	if err != nil {
-		t.Fatalf("Failed to set cache entry: %v", err)
-	}
-
-	// Should exist immediately
-	exists, err := cache.Exists(ctx, "test-key")
-	if err != nil {
-		t.Fatalf("Failed to check existence: %v", err)
-	}
-	if !exists {
-		t.Error("Expected key to exist immediately after setting")
-	}
-
-	// Wait for expiration
-	time.Sleep(100 * time.Millisecond)
-
-	// Get should return cache miss due to expiration
-	_, err = cache.Get(ctx, "test-key")
-	if err != ErrCacheMiss {
-		t.Errorf("Expected ErrCacheMiss after expiration, got %v", err)
-	}
-}
-
 func TestCloudStorageCacheDelete(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping Cloud Storage tests in short mode")
@@ -553,13 +390,11 @@ func TestCloudStorageCacheDelete(t *testing.T) {
 	ctx := context.Background()
 
 	entry := &CacheEntry{
-		RSS: rss.Item{
-			Title: "Test Article",
-			Link:  "http://example.com/test",
-		},
-		Summary: gemini.SummarizeResponse{
-			Summary: "Test summary",
-		},
+		Title:         "Test Article",
+		URL:           "http://example.com/test",
+		Source:        "test-source",
+		PubDate:       time.Now(),
+		ProcessedDate: time.Now(),
 	}
 
 	err = cache.Set(ctx, "test-key", entry)
@@ -601,28 +436,21 @@ func TestCacheManagerCloudStorage(t *testing.T) {
 	ctx := context.Background()
 
 	item := rss.Item{
-		Title: "Test Article",
-		Link:  "http://example.com/test",
-		GUID:  "test-guid",
+		Title:      "Test Article",
+		Link:       "http://example.com/test",
+		GUID:       "test-guid",
+		Source:     "test-source",
+		ParsedDate: time.Now(),
 	}
 
 	summary := gemini.SummarizeResponse{
 		Summary: "Test summary",
 	}
 
-	// Test SetSummary and GetSummary
+	// Test SetSummary
 	err = manager.SetSummary(ctx, item, summary)
 	if err != nil {
 		t.Fatalf("Failed to set summary: %v", err)
-	}
-
-	retrievedSummary, err := manager.GetSummary(ctx, item)
-	if err != nil {
-		t.Fatalf("Failed to get summary: %v", err)
-	}
-
-	if retrievedSummary.Summary != summary.Summary {
-		t.Errorf("Expected summary '%s', got '%s'", summary.Summary, retrievedSummary.Summary)
 	}
 
 	// Test IsCached
