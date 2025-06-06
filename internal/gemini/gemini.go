@@ -50,7 +50,7 @@ type SummarizeResponse struct {
 
 // geminiRequest represents the request structure for Gemini API
 type geminiRequest struct {
-	Contents []geminiContent `json:"contents"`
+	Contents         []geminiContent         `json:"contents"`
 	GenerationConfig *geminiGenerationConfig `json:"generationConfig,omitempty"`
 }
 
@@ -64,7 +64,7 @@ type geminiPart struct {
 
 type geminiGenerationConfig struct {
 	Temperature     float64 `json:"temperature"`
-	TopP           float64 `json:"topP"`
+	TopP            float64 `json:"topP"`
 	MaxOutputTokens int     `json:"maxOutputTokens"`
 }
 
@@ -93,7 +93,7 @@ func (c *Client) SummarizeURL(ctx context.Context, url string) (*SummarizeRespon
 
 	// Create prompt for RSS mode (shorter summary for team sharing)
 	prompt := c.buildRSSPrompt(textContent)
-	
+
 	// Call Gemini API
 	summary, err := c.callGeminiAPI(ctx, prompt)
 	if err != nil {
@@ -122,7 +122,7 @@ func (c *Client) SummarizeURLForOnDemand(ctx context.Context, url string) (*Summ
 
 	// Create prompt for on-demand mode (longer summary)
 	prompt := c.buildOnDemandPrompt(textContent)
-	
+
 	// Call Gemini API
 	summary, err := c.callGeminiAPI(ctx, prompt)
 	if err != nil {
@@ -167,18 +167,18 @@ func (c *Client) extractTextFromHTML(html string) string {
 	// Remove script and style tags
 	scriptRe := regexp.MustCompile(`(?i)<script[^>]*>[\s\S]*?</script>`)
 	html = scriptRe.ReplaceAllString(html, "")
-	
+
 	styleRe := regexp.MustCompile(`(?i)<style[^>]*>[\s\S]*?</style>`)
 	html = styleRe.ReplaceAllString(html, "")
-	
+
 	// Remove HTML tags
 	tagRe := regexp.MustCompile(`<[^>]+>`)
 	text := tagRe.ReplaceAllString(html, " ")
-	
+
 	// Normalize whitespace
 	spaceRe := regexp.MustCompile(`\s+`)
 	text = spaceRe.ReplaceAllString(text, " ")
-	
+
 	return strings.TrimSpace(text)
 }
 
@@ -238,7 +238,7 @@ func (c *Client) callGeminiAPI(ctx context.Context, prompt string) (string, erro
 		},
 		GenerationConfig: &geminiGenerationConfig{
 			Temperature:     0.3,
-			TopP:           0.8,
+			TopP:            0.8,
 			MaxOutputTokens: 8000,
 		},
 	}

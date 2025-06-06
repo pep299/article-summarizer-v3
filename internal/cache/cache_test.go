@@ -24,8 +24,8 @@ func TestMemoryCache(t *testing.T) {
 			Link:  "http://example.com/test",
 		},
 		Summary: gemini.SummarizeResponse{
-			Summary:   "Test summary",
-					},
+			Summary: "Test summary",
+		},
 	}
 
 	err := cache.Set(ctx, "test-key", entry)
@@ -274,8 +274,8 @@ func TestCacheManager(t *testing.T) {
 	}
 
 	summary := gemini.SummarizeResponse{
-		Summary:   "Test summary",
-			}
+		Summary: "Test summary",
+	}
 
 	// Test SetSummary and GetSummary
 	err = manager.SetSummary(ctx, item, summary)
@@ -351,15 +351,15 @@ func TestGenerateKey(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			key := GenerateKey(test.item)
-			
+
 			if key == "" {
 				t.Error("Expected non-empty key")
 			}
-			
+
 			if !strings.HasPrefix(key, "article:") {
 				t.Errorf("Expected key to start with 'article:', got '%s'", key)
 			}
-			
+
 			// Key should be consistent for the same item
 			key2 := GenerateKey(test.item)
 			if key != key2 {
@@ -380,24 +380,24 @@ func TestEstimateMemoryUsage(t *testing.T) {
 			Category:    []string{"tech", "news"},
 		},
 		Summary: gemini.SummarizeResponse{
-			Summary:   "Test summary content",
+			Summary: "Test summary content",
 		},
 	}
 
 	size := estimateMemoryUsage(entry)
-	
+
 	if size <= 0 {
 		t.Error("Expected positive memory usage estimate")
 	}
-	
+
 	// Should include at least the length of strings
-	minExpected := int64(len(entry.Key) + len(entry.RSS.Title) + len(entry.RSS.Link) + 
+	minExpected := int64(len(entry.Key) + len(entry.RSS.Title) + len(entry.RSS.Link) +
 		len(entry.RSS.Description) + len(entry.RSS.GUID) + len(entry.Summary.Summary))
-	
+
 	for _, category := range entry.RSS.Category {
 		minExpected += int64(len(category))
 	}
-	
+
 	if size < minExpected {
 		t.Errorf("Expected memory usage to be at least %d, got %d", minExpected, size)
 	}
@@ -409,20 +409,20 @@ func TestCloudStorageCache(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping Cloud Storage tests in short mode")
 	}
-	
+
 	// Set up test bucket environment variable
 	testBucket := "test-article-summarizer-cache"
 	os.Setenv("CACHE_BUCKET", testBucket)
 	defer os.Unsetenv("CACHE_BUCKET")
-	
+
 	cache, err := NewCloudStorageCache(1 * time.Hour)
 	if err != nil {
 		t.Skipf("Skipping Cloud Storage test: %v", err)
 	}
 	defer cache.Close()
-	
+
 	ctx := context.Background()
-	
+
 	// Test Set and Get
 	entry := &CacheEntry{
 		RSS: rss.Item{
@@ -430,29 +430,29 @@ func TestCloudStorageCache(t *testing.T) {
 			Link:  "http://example.com/test",
 		},
 		Summary: gemini.SummarizeResponse{
-			Summary:   "Test summary",
-					},
+			Summary: "Test summary",
+		},
 	}
-	
+
 	err = cache.Set(ctx, "test-key", entry)
 	if err != nil {
 		t.Fatalf("Failed to set cache entry: %v", err)
 	}
-	
+
 	// Test Get
 	retrieved, err := cache.Get(ctx, "test-key")
 	if err != nil {
 		t.Fatalf("Failed to get cache entry: %v", err)
 	}
-	
+
 	if retrieved.RSS.Title != entry.RSS.Title {
 		t.Errorf("Expected title '%s', got '%s'", entry.RSS.Title, retrieved.RSS.Title)
 	}
-	
+
 	if retrieved.Summary.Summary != entry.Summary.Summary {
 		t.Errorf("Expected summary '%s', got '%s'", entry.Summary.Summary, retrieved.Summary.Summary)
 	}
-	
+
 	// Test Exists
 	exists, err := cache.Exists(ctx, "test-key")
 	if err != nil {
@@ -461,7 +461,7 @@ func TestCloudStorageCache(t *testing.T) {
 	if !exists {
 		t.Error("Expected key to exist")
 	}
-	
+
 	// Test non-existent key
 	exists, err = cache.Exists(ctx, "non-existent")
 	if err != nil {
@@ -470,13 +470,13 @@ func TestCloudStorageCache(t *testing.T) {
 	if exists {
 		t.Error("Expected key to not exist")
 	}
-	
+
 	// Test Get non-existent key
 	_, err = cache.Get(ctx, "non-existent")
 	if err != ErrCacheMiss {
 		t.Errorf("Expected ErrCacheMiss, got %v", err)
 	}
-	
+
 	// Cleanup
 	err = cache.Delete(ctx, "test-key")
 	if err != nil {
@@ -488,19 +488,19 @@ func TestCloudStorageCacheExpiration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping Cloud Storage tests in short mode")
 	}
-	
+
 	testBucket := "test-article-summarizer-cache"
 	os.Setenv("CACHE_BUCKET", testBucket)
 	defer os.Unsetenv("CACHE_BUCKET")
-	
+
 	cache, err := NewCloudStorageCache(50 * time.Millisecond)
 	if err != nil {
 		t.Skipf("Skipping Cloud Storage test: %v", err)
 	}
 	defer cache.Close()
-	
+
 	ctx := context.Background()
-	
+
 	entry := &CacheEntry{
 		RSS: rss.Item{
 			Title: "Test Article",
@@ -510,12 +510,12 @@ func TestCloudStorageCacheExpiration(t *testing.T) {
 			Summary: "Test summary",
 		},
 	}
-	
+
 	err = cache.Set(ctx, "test-key", entry)
 	if err != nil {
 		t.Fatalf("Failed to set cache entry: %v", err)
 	}
-	
+
 	// Should exist immediately
 	exists, err := cache.Exists(ctx, "test-key")
 	if err != nil {
@@ -524,10 +524,10 @@ func TestCloudStorageCacheExpiration(t *testing.T) {
 	if !exists {
 		t.Error("Expected key to exist immediately after setting")
 	}
-	
+
 	// Wait for expiration
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Get should return cache miss due to expiration
 	_, err = cache.Get(ctx, "test-key")
 	if err != ErrCacheMiss {
@@ -539,19 +539,19 @@ func TestCloudStorageCacheDelete(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping Cloud Storage tests in short mode")
 	}
-	
+
 	testBucket := "test-article-summarizer-cache"
 	os.Setenv("CACHE_BUCKET", testBucket)
 	defer os.Unsetenv("CACHE_BUCKET")
-	
+
 	cache, err := NewCloudStorageCache(1 * time.Hour)
 	if err != nil {
 		t.Skipf("Skipping Cloud Storage test: %v", err)
 	}
 	defer cache.Close()
-	
+
 	ctx := context.Background()
-	
+
 	entry := &CacheEntry{
 		RSS: rss.Item{
 			Title: "Test Article",
@@ -561,18 +561,18 @@ func TestCloudStorageCacheDelete(t *testing.T) {
 			Summary: "Test summary",
 		},
 	}
-	
+
 	err = cache.Set(ctx, "test-key", entry)
 	if err != nil {
 		t.Fatalf("Failed to set cache entry: %v", err)
 	}
-	
+
 	// Delete the entry
 	err = cache.Delete(ctx, "test-key")
 	if err != nil {
 		t.Fatalf("Failed to delete cache entry: %v", err)
 	}
-	
+
 	// Should not exist after deletion
 	exists, err := cache.Exists(ctx, "test-key")
 	if err != nil {
@@ -587,44 +587,44 @@ func TestCacheManagerCloudStorage(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping Cloud Storage tests in short mode")
 	}
-	
+
 	testBucket := "test-article-summarizer-cache"
 	os.Setenv("CACHE_BUCKET", testBucket)
 	defer os.Unsetenv("CACHE_BUCKET")
-	
+
 	manager, err := NewManager("cloud-storage", 1*time.Hour)
 	if err != nil {
 		t.Skipf("Skipping Cloud Storage test: %v", err)
 	}
 	defer manager.Close()
-	
+
 	ctx := context.Background()
-	
+
 	item := rss.Item{
 		Title: "Test Article",
 		Link:  "http://example.com/test",
 		GUID:  "test-guid",
 	}
-	
+
 	summary := gemini.SummarizeResponse{
-		Summary:   "Test summary",
-			}
-	
+		Summary: "Test summary",
+	}
+
 	// Test SetSummary and GetSummary
 	err = manager.SetSummary(ctx, item, summary)
 	if err != nil {
 		t.Fatalf("Failed to set summary: %v", err)
 	}
-	
+
 	retrievedSummary, err := manager.GetSummary(ctx, item)
 	if err != nil {
 		t.Fatalf("Failed to get summary: %v", err)
 	}
-	
+
 	if retrievedSummary.Summary != summary.Summary {
 		t.Errorf("Expected summary '%s', got '%s'", summary.Summary, retrievedSummary.Summary)
 	}
-	
+
 	// Test IsCached
 	cached, err := manager.IsCached(ctx, item)
 	if err != nil {
@@ -633,7 +633,7 @@ func TestCacheManagerCloudStorage(t *testing.T) {
 	if !cached {
 		t.Error("Expected item to be cached")
 	}
-	
+
 	// Cleanup
 	key := GenerateKey(item)
 	if csCache, ok := manager.cache.(*CloudStorageCache); ok {
@@ -648,7 +648,7 @@ func TestCloudStorageCacheInvalidBucket(t *testing.T) {
 	// Test with empty bucket name should use default
 	os.Setenv("CACHE_BUCKET", "")
 	defer os.Unsetenv("CACHE_BUCKET")
-	
+
 	cache, err := NewCloudStorageCache(1 * time.Hour)
 	if err != nil {
 		t.Skipf("Expected to create cache with default bucket name: %v", err)

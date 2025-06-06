@@ -51,8 +51,8 @@ func (s *Server) processRSSHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := map[string]interface{}{
-		"status": "success",
-		"feed":   feedName,
+		"status":  "success",
+		"feed":    feedName,
 		"message": "Feed processed successfully",
 	}
 
@@ -169,8 +169,8 @@ func (s *Server) webhookSummarizeHandler(w http.ResponseWriter, r *http.Request)
 
 	// Create article structure for Slack notification
 	article := rss.Item{
-		Title: "", // Title will be extracted by Gemini or left empty
-		Link:  req.URL,
+		Title:  "", // Title will be extracted by Gemini or left empty
+		Link:   req.URL,
 		Source: "ondemand",
 	}
 
@@ -204,10 +204,10 @@ func (s *Server) statusHandler(w http.ResponseWriter, r *http.Request) {
 	cacheStats, _ := s.cacheManager.GetStats(ctx)
 
 	response := map[string]interface{}{
-		"status":     "running",
-		"version":    "v3.0.0",
-		"cache":      cacheStats,
-		"rss_feeds":  len(s.config.RSSFeeds),
+		"status":    "running",
+		"version":   "v3.0.0",
+		"cache":     cacheStats,
+		"rss_feeds": len(s.config.RSSFeeds),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -218,14 +218,14 @@ func (s *Server) statusHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) configHandler(w http.ResponseWriter, r *http.Request) {
 	// Return sanitized configuration without sensitive data
 	response := map[string]interface{}{
-		"port":                       s.config.Port,
-		"host":                       s.config.Host,
-		"gemini_model":               s.config.GeminiModel,
-		"slack_channel":              s.config.SlackChannel,
-		"webhook_slack_channel":      s.config.WebhookSlackChannel,
-		"rss_feeds":                  s.config.RSSFeeds,
-		"cache_type":                 s.config.CacheType,
-		"cache_duration_hours":       s.config.CacheDuration,
+		"port":                  s.config.Port,
+		"host":                  s.config.Host,
+		"gemini_model":          s.config.GeminiModel,
+		"slack_channel":         s.config.SlackChannel,
+		"webhook_slack_channel": s.config.WebhookSlackChannel,
+		"rss_feeds":             s.config.RSSFeeds,
+		"cache_type":            s.config.CacheType,
+		"cache_duration_hours":  s.config.CacheDuration,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

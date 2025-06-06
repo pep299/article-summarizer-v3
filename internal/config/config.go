@@ -19,8 +19,8 @@ type Config struct {
 	GeminiModel  string `json:"gemini_model"`
 
 	// Slack settings
-	SlackBotToken   string `json:"-"` // Don't expose in JSON
-	SlackChannel    string `json:"slack_channel"`
+	SlackBotToken       string `json:"-"` // Don't expose in JSON
+	SlackChannel        string `json:"slack_channel"`
 	WebhookSlackChannel string `json:"webhook_slack_channel"`
 
 	// RSS settings
@@ -45,15 +45,15 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	config := &Config{
-		Port:         getEnvOrDefault("PORT", "8080"),
-		Host:         getEnvOrDefault("HOST", "0.0.0.0"),
-		GeminiAPIKey: getEnvOrDefault("GEMINI_API_KEY", ""),
-		GeminiModel:  getEnvOrDefault("GEMINI_MODEL", "gemini-2.5-flash"),
-		SlackBotToken: getEnvOrDefault("SLACK_BOT_TOKEN", ""),
-		SlackChannel:    getEnvOrDefault("SLACK_CHANNEL", "#article-summarizer"),
+		Port:                getEnvOrDefault("PORT", "8080"),
+		Host:                getEnvOrDefault("HOST", "0.0.0.0"),
+		GeminiAPIKey:        getEnvOrDefault("GEMINI_API_KEY", ""),
+		GeminiModel:         getEnvOrDefault("GEMINI_MODEL", "gemini-2.5-flash"),
+		SlackBotToken:       getEnvOrDefault("SLACK_BOT_TOKEN", ""),
+		SlackChannel:        getEnvOrDefault("SLACK_CHANNEL", "#article-summarizer"),
 		WebhookSlackChannel: getEnvOrDefault("WEBHOOK_SLACK_CHANNEL", "#ondemand-article-summary"),
-		CacheType:       getEnvOrDefault("CACHE_TYPE", "memory"),
-		CacheDuration:   getEnvOrDefaultInt("CACHE_DURATION_HOURS", 24),
+		CacheType:           getEnvOrDefault("CACHE_TYPE", "memory"),
+		CacheDuration:       getEnvOrDefaultInt("CACHE_DURATION_HOURS", 24),
 		RSSFeeds: map[string]RSSFeedConfig{
 			"hatena": {
 				Name:     "はてブ テクノロジー",

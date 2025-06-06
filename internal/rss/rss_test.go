@@ -104,19 +104,19 @@ func TestFilterItems(t *testing.T) {
 
 func TestNewClient(t *testing.T) {
 	client := NewClient()
-	
+
 	if client == nil {
 		t.Error("Expected non-nil client")
 	}
-	
+
 	if client.httpClient == nil {
 		t.Error("Expected non-nil http client")
 	}
-	
+
 	if client.userAgent == "" {
 		t.Error("Expected non-empty user agent")
 	}
-	
+
 	if !strings.Contains(client.userAgent, "Article Summarizer Bot") {
 		t.Errorf("Expected user agent to contain 'Article Summarizer Bot', got '%s'", client.userAgent)
 	}
@@ -125,13 +125,13 @@ func TestNewClient(t *testing.T) {
 func TestFetchFeedErrorHandling(t *testing.T) {
 	client := NewClient()
 	ctx := context.Background()
-	
+
 	// Test with invalid URL to check error handling
 	_, err := client.FetchFeed(ctx, "test", "invalid-url")
 	if err == nil {
 		t.Error("Expected error for invalid URL")
 	}
-	
+
 	// Test with non-existent URL
 	_, err = client.FetchFeed(ctx, "test", "http://nonexistent.example.com/rss")
 	if err == nil {
@@ -141,7 +141,7 @@ func TestFetchFeedErrorHandling(t *testing.T) {
 
 func TestParseRSSXML(t *testing.T) {
 	client := NewClient()
-	
+
 	// Test RSS 2.0 format
 	rss20XML := `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -156,20 +156,20 @@ func TestParseRSSXML(t *testing.T) {
 		</item>
 	</channel>
 </rss>`
-	
+
 	items, err := client.parseRSSXML(rss20XML)
 	if err != nil {
 		t.Fatalf("Failed to parse RSS 2.0 XML: %v", err)
 	}
-	
+
 	if len(items) != 1 {
 		t.Errorf("Expected 1 item, got %d", len(items))
 	}
-	
+
 	if items[0].Title != "Test Article" {
 		t.Errorf("Expected title 'Test Article', got '%s'", items[0].Title)
 	}
-	
+
 	// Test RDF format
 	rdfXML := `<?xml version="1.0" encoding="UTF-8"?>
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -179,20 +179,20 @@ func TestParseRSSXML(t *testing.T) {
 		<description>RDF test description</description>
 	</item>
 </rdf:RDF>`
-	
+
 	items, err = client.parseRSSXML(rdfXML)
 	if err != nil {
 		t.Fatalf("Failed to parse RDF XML: %v", err)
 	}
-	
+
 	if len(items) != 1 {
 		t.Errorf("Expected 1 item from RDF, got %d", len(items))
 	}
-	
+
 	if items[0].Title != "RDF Test Article" {
 		t.Errorf("Expected title 'RDF Test Article', got '%s'", items[0].Title)
 	}
-	
+
 	// Test invalid XML
 	_, err = client.parseRSSXML("invalid xml content")
 	if err == nil {
@@ -226,15 +226,15 @@ func TestGenerateKey(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			key := generateKey(test.item)
-			
+
 			if key == "" {
 				t.Error("Expected non-empty key")
 			}
-			
+
 			if !strings.HasPrefix(key, "article:") {
 				t.Errorf("Expected key to start with 'article:', got '%s'", key)
 			}
-			
+
 			// Key should be consistent for the same item
 			key2 := generateKey(test.item)
 			if key != key2 {
@@ -246,7 +246,7 @@ func TestGenerateKey(t *testing.T) {
 
 func TestExtractTextFromHTML(t *testing.T) {
 	_ = NewClient()
-	
+
 	html := `<html>
 	<head>
 		<title>Test Page</title>
@@ -260,35 +260,35 @@ func TestExtractTextFromHTML(t *testing.T) {
 		<script>alert('should be removed');</script>
 	</body>
 </html>`
-	
+
 	text := extractTextFromHTML(html)
-	
+
 	// Should contain main content
 	if !strings.Contains(text, "Main Title") {
 		t.Error("Expected extracted text to contain 'Main Title'")
 	}
-	
+
 	if !strings.Contains(text, "This is a paragraph") {
 		t.Error("Expected extracted text to contain paragraph content")
 	}
-	
+
 	if !strings.Contains(text, "bold text") {
 		t.Error("Expected extracted text to contain 'bold text'")
 	}
-	
+
 	// Should not contain script or style content
 	if strings.Contains(text, "console.log") {
 		t.Error("Expected extracted text to not contain script content")
 	}
-	
+
 	if strings.Contains(text, "color: red") {
 		t.Error("Expected extracted text to not contain style content")
 	}
-	
+
 	if strings.Contains(text, "alert") {
 		t.Error("Expected extracted text to not contain script content")
 	}
-	
+
 	// Should not contain HTML tags
 	if strings.Contains(text, "<h1>") || strings.Contains(text, "</h1>") {
 		t.Error("Expected extracted text to not contain HTML tags")

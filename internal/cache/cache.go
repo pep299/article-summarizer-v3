@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"google.golang.org/api/iterator"
 	"github.com/pep299/article-summarizer-v3/internal/gemini"
 	"github.com/pep299/article-summarizer-v3/internal/rss"
+	"google.golang.org/api/iterator"
 )
 
 // Cache interface defines cache operations
@@ -29,25 +29,25 @@ type Cache interface {
 
 // CacheEntry represents a cached item
 type CacheEntry struct {
-	Key        string                     `json:"key"`
-	RSS        rss.Item                   `json:"rss"`
-	Summary    gemini.SummarizeResponse   `json:"summary"`
-	CreatedAt  time.Time                  `json:"created_at"`
-	ExpiresAt  time.Time                  `json:"expires_at"`
-	AccessedAt time.Time                  `json:"accessed_at"`
-	AccessCount int                       `json:"access_count"`
+	Key         string                   `json:"key"`
+	RSS         rss.Item                 `json:"rss"`
+	Summary     gemini.SummarizeResponse `json:"summary"`
+	CreatedAt   time.Time                `json:"created_at"`
+	ExpiresAt   time.Time                `json:"expires_at"`
+	AccessedAt  time.Time                `json:"accessed_at"`
+	AccessCount int                      `json:"access_count"`
 }
 
 // Stats represents cache statistics
 type Stats struct {
-	TotalEntries    int           `json:"total_entries"`
-	HitCount        int64         `json:"hit_count"`
-	MissCount       int64         `json:"miss_count"`
-	HitRate         float64       `json:"hit_rate"`
-	MemoryUsage     int64         `json:"memory_usage_bytes"`
-	OldestEntry     time.Time     `json:"oldest_entry"`
-	AverageAge      time.Duration `json:"average_age"`
-	ExpiredEntries  int           `json:"expired_entries"`
+	TotalEntries   int           `json:"total_entries"`
+	HitCount       int64         `json:"hit_count"`
+	MissCount      int64         `json:"miss_count"`
+	HitRate        float64       `json:"hit_rate"`
+	MemoryUsage    int64         `json:"memory_usage_bytes"`
+	OldestEntry    time.Time     `json:"oldest_entry"`
+	AverageAge     time.Duration `json:"average_age"`
+	ExpiredEntries int           `json:"expired_entries"`
 }
 
 // MemoryCache implements in-memory cache
@@ -67,10 +67,10 @@ func NewMemoryCache(duration time.Duration) *MemoryCache {
 		duration:    duration,
 		stopCleanup: make(chan struct{}),
 	}
-	
+
 	// Start cleanup goroutine
 	go cache.cleanup()
-	
+
 	return cache
 }
 
@@ -176,7 +176,7 @@ func (c *CloudStorageCache) Set(ctx context.Context, key string, entry *CacheEnt
 
 	writer := obj.NewWriter(ctx)
 	writer.ContentType = "application/json"
-	
+
 	if _, err := writer.Write(data); err != nil {
 		writer.Close()
 		return fmt.Errorf("writing object data: %w", err)
@@ -223,10 +223,10 @@ func (c *CloudStorageCache) Exists(ctx context.Context, key string) (bool, error
 // Clear removes all entries from Cloud Storage with the cache prefix
 func (c *CloudStorageCache) Clear(ctx context.Context) error {
 	bucket := c.client.Bucket(c.bucketName)
-	
+
 	// List all objects with cache prefix
 	it := bucket.Objects(ctx, &storage.Query{Prefix: c.prefix})
-	
+
 	for {
 		attrs, err := it.Next()
 		if err == iterator.Done {
@@ -306,7 +306,7 @@ func (c *MemoryCache) Get(ctx context.Context, key string) (*CacheEntry, error) 
 		c.mutex.Unlock()
 		return nil, ErrCacheMiss
 	}
-	
+
 	// Check if expired
 	now := time.Now()
 	if now.After(entry.ExpiresAt) {
@@ -321,25 +321,25 @@ func (c *MemoryCache) Get(ctx context.Context, key string) (*CacheEntry, error) 
 		c.mutex.Unlock()
 		return nil, ErrCacheMiss
 	}
-	
+
 	c.mutex.RUnlock()
-	
+
 	// Need write lock to update access information
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	// Double-check entry still exists after re-acquiring lock
 	entry, exists = c.entries[key]
 	if !exists || now.After(entry.ExpiresAt) {
 		c.missCount++
 		return nil, ErrCacheMiss
 	}
-	
+
 	// Update access information
 	entry.AccessedAt = now
 	entry.AccessCount++
 	c.hitCount++
-	
+
 	return entry, nil
 }
 
@@ -347,14 +347,14 @@ func (c *MemoryCache) Get(ctx context.Context, key string) (*CacheEntry, error) 
 func (c *MemoryCache) Set(ctx context.Context, key string, entry *CacheEntry) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	now := time.Now()
 	entry.Key = key
 	entry.CreatedAt = now
 	entry.ExpiresAt = now.Add(c.duration)
 	entry.AccessedAt = now
 	entry.AccessCount = 0
-	
+
 	c.entries[key] = entry
 	return nil
 }
@@ -363,7 +363,7 @@ func (c *MemoryCache) Set(ctx context.Context, key string, entry *CacheEntry) er
 func (c *MemoryCache) Delete(ctx context.Context, key string) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	delete(c.entries, key)
 	return nil
 }
@@ -372,17 +372,17 @@ func (c *MemoryCache) Delete(ctx context.Context, key string) error {
 func (c *MemoryCache) Exists(ctx context.Context, key string) (bool, error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	entry, exists := c.entries[key]
 	if !exists {
 		return false, nil
 	}
-	
+
 	// Check if expired
 	if time.Now().After(entry.ExpiresAt) {
 		return false, nil
 	}
-	
+
 	return true, nil
 }
 
@@ -390,7 +390,7 @@ func (c *MemoryCache) Exists(ctx context.Context, key string) (bool, error) {
 func (c *MemoryCache) Clear(ctx context.Context) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	c.entries = make(map[string]*CacheEntry)
 	c.hitCount = 0
 	c.missCount = 0
@@ -401,45 +401,45 @@ func (c *MemoryCache) Clear(ctx context.Context) error {
 func (c *MemoryCache) GetStats(ctx context.Context) (*Stats, error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	stats := &Stats{
 		TotalEntries: len(c.entries),
 		HitCount:     c.hitCount,
 		MissCount:    c.missCount,
 	}
-	
+
 	if c.hitCount+c.missCount > 0 {
 		stats.HitRate = float64(c.hitCount) / float64(c.hitCount+c.missCount)
 	}
-	
+
 	// Calculate memory usage estimate
 	for _, entry := range c.entries {
 		stats.MemoryUsage += estimateMemoryUsage(entry)
 	}
-	
+
 	// Find oldest entry and calculate average age
 	var totalAge time.Duration
 	var expiredCount int
 	now := time.Now()
-	
+
 	for _, entry := range c.entries {
 		if stats.OldestEntry.IsZero() || entry.CreatedAt.Before(stats.OldestEntry) {
 			stats.OldestEntry = entry.CreatedAt
 		}
-		
+
 		totalAge += now.Sub(entry.CreatedAt)
-		
+
 		if now.After(entry.ExpiresAt) {
 			expiredCount++
 		}
 	}
-	
+
 	if len(c.entries) > 0 {
 		stats.AverageAge = totalAge / time.Duration(len(c.entries))
 	}
-	
+
 	stats.ExpiredEntries = expiredCount
-	
+
 	return stats, nil
 }
 
@@ -447,7 +447,7 @@ func (c *MemoryCache) GetStats(ctx context.Context) (*Stats, error) {
 func (c *MemoryCache) cleanup() {
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-c.stopCleanup:
@@ -462,7 +462,7 @@ func (c *MemoryCache) cleanup() {
 func (c *MemoryCache) cleanupExpired() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	now := time.Now()
 	for key, entry := range c.entries {
 		if now.After(entry.ExpiresAt) {
@@ -485,7 +485,7 @@ type Manager struct {
 // NewManager creates a new cache manager
 func NewManager(cacheType string, duration time.Duration) (*Manager, error) {
 	var cache Cache
-	
+
 	switch cacheType {
 	case "memory":
 		cache = NewMemoryCache(duration)
@@ -498,7 +498,7 @@ func NewManager(cacheType string, duration time.Duration) (*Manager, error) {
 	default:
 		return nil, fmt.Errorf("unsupported cache type: %s", cacheType)
 	}
-	
+
 	return &Manager{cache: cache}, nil
 }
 
@@ -509,7 +509,7 @@ func (m *Manager) GetSummary(ctx context.Context, item rss.Item) (*gemini.Summar
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &entry.Summary, nil
 }
 
@@ -520,7 +520,7 @@ func (m *Manager) SetSummary(ctx context.Context, item rss.Item, summary gemini.
 		RSS:     item,
 		Summary: summary,
 	}
-	
+
 	return m.cache.Set(ctx, key, entry)
 }
 
@@ -533,35 +533,35 @@ func (m *Manager) IsCached(ctx context.Context, item rss.Item) (bool, error) {
 // FilterCached filters out already cached items from a list
 func (m *Manager) FilterCached(ctx context.Context, items []rss.Item) ([]rss.Item, error) {
 	var uncached []rss.Item
-	
+
 	for _, item := range items {
 		cached, err := m.IsCached(ctx, item)
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if !cached {
 			uncached = append(uncached, item)
 		}
 	}
-	
+
 	return uncached, nil
 }
 
 // GetCachedSummaries retrieves cached summaries for a list of items
 func (m *Manager) GetCachedSummaries(ctx context.Context, items []rss.Item) ([]CacheEntry, error) {
 	var summaries []CacheEntry
-	
+
 	for _, item := range items {
 		key := GenerateKey(item)
 		entry, err := m.cache.Get(ctx, key)
 		if err != nil {
 			continue // Skip if not cached
 		}
-		
+
 		summaries = append(summaries, *entry)
 	}
-	
+
 	return summaries, nil
 }
 
@@ -587,7 +587,7 @@ func GenerateKey(item rss.Item) string {
 	if identifier == "" {
 		identifier = item.Link
 	}
-	
+
 	// Create MD5 hash for consistent key length
 	hash := md5.Sum([]byte(identifier))
 	return fmt.Sprintf("article:%x", hash)
@@ -598,20 +598,20 @@ func estimateMemoryUsage(entry *CacheEntry) int64 {
 	size := int64(len(entry.Key))
 	size += int64(len(entry.RSS.Title) + len(entry.RSS.Link) + len(entry.RSS.Description) + len(entry.RSS.GUID))
 	size += int64(len(entry.Summary.Summary))
-	
+
 	// Add estimated overhead for struct fields and slices
 	size += 128 // rough estimate for time.Time fields and other overhead
-	
+
 	// Add memory for categories and key points
 	for _, category := range entry.RSS.Category {
 		size += int64(len(category))
 	}
-	
+
 	return size
 }
 
 // Common cache errors
 var (
-	ErrCacheMiss = fmt.Errorf("cache miss")
+	ErrCacheMiss    = fmt.Errorf("cache miss")
 	ErrCacheExpired = fmt.Errorf("cache entry expired")
 )

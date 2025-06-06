@@ -54,18 +54,18 @@ build-cli:
 # Run tests
 test:
 	@echo "Running tests..."
-	$(GOTEST) -v ./...
+	$(GOTEST) -v ./internal/... ./cmd/...
 
 # Run tests with coverage
 test-coverage:
 	@echo "Running tests with coverage..."
-	$(GOTEST) -v -coverprofile=coverage.out ./...
+	$(GOTEST) -v -coverprofile=coverage.out ./internal/... ./cmd/...
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 
 # Run tests with race detection
 test-race:
 	@echo "Running tests with race detection..."
-	$(GOTEST) -race -v ./...
+	$(GOTEST) -race -v ./internal/... ./cmd/...
 
 # Run unit tests only (exclude integration tests)
 test-unit:
@@ -75,14 +75,14 @@ test-unit:
 # Run integration tests
 test-integration:
 	@echo "Running integration tests..."
-	$(GOTEST) -v -run TestFullServerIntegration ./...
-	$(GOTEST) -v -run TestEndToEndWorkflow ./...
+	$(GOTEST) -v -run TestFullServerIntegration ./cmd/... ./internal/...
+	$(GOTEST) -v -run TestEndToEndWorkflow ./cmd/... ./internal/...
 
 # Run Cloud Functions tests
 test-functions:
 	@echo "Running Cloud Functions tests..."
-	$(GOTEST) -v -run TestSummarizeArticles ./...
-	$(GOTEST) -v -run TestProcessRSSScheduled ./...
+	$(GOTEST) -v -run TestSummarizeArticles .
+	$(GOTEST) -v -run TestProcessRSSScheduled .
 
 # Run Cloud Storage cache tests
 test-cache:
@@ -93,22 +93,22 @@ test-cache:
 # Run short tests only (skip integration and external dependencies)
 test-short:
 	@echo "Running short tests..."
-	$(GOTEST) -v -short ./...
+	$(GOTEST) -v -short ./internal/... ./cmd/...
 
 # Run tests with verbose output
 test-verbose:
 	@echo "Running verbose tests..."
-	$(GOTEST) -v -count=1 ./...
+	$(GOTEST) -v -count=1 ./internal/... ./cmd/...
 
 # Run benchmark tests
 test-bench:
 	@echo "Running benchmark tests..."
-	$(GOTEST) -v -bench=. -benchmem ./...
+	$(GOTEST) -v -bench=. -benchmem ./internal/... ./cmd/...
 
 # Run all tests with full coverage report
 test-full:
 	@echo "Running full test suite..."
-	$(GOTEST) -v -race -coverprofile=coverage.out -covermode=atomic ./...
+	$(GOTEST) -v -race -coverprofile=coverage.out -covermode=atomic ./internal/... ./cmd/...
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
@@ -136,13 +136,13 @@ test-handlers:
 # Test with timeout
 test-timeout:
 	@echo "Running tests with timeout..."
-	$(GOTEST) -v -timeout=30s ./...
+	$(GOTEST) -v -timeout=30s ./internal/... ./cmd/...
 
 # Continuous testing (watch for changes)
 test-watch:
 	@echo "Running tests in watch mode..."
 	@while true; do \
-		$(GOTEST) -v -short ./...; \
+		$(GOTEST) -v -short ./internal/... ./cmd/...; \
 		sleep 2; \
 	done
 
@@ -187,12 +187,12 @@ test-slack:
 # Format code
 fmt:
 	@echo "Formatting code..."
-	$(GOCMD) fmt ./...
+	$(GOCMD) fmt ./internal/... ./cmd/...
 
 # Vet code
 vet:
 	@echo "Vetting code..."
-	$(GOCMD) vet ./...
+	$(GOCMD) vet ./internal/... ./cmd/...
 
 # Run all quality checks
 check: fmt vet test

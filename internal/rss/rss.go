@@ -186,7 +186,7 @@ func generateKey(item Item) string {
 	if identifier == "" {
 		identifier = item.Link
 	}
-	
+
 	// Create a simple hash-like key
 	return fmt.Sprintf("article:%s", identifier)
 }
@@ -196,17 +196,17 @@ func extractTextFromHTML(html string) string {
 	// Remove script and style tags
 	scriptRe := regexp.MustCompile(`(?i)<script[^>]*>[\s\S]*?</script>`)
 	html = scriptRe.ReplaceAllString(html, "")
-	
+
 	styleRe := regexp.MustCompile(`(?i)<style[^>]*>[\s\S]*?</style>`)
 	html = styleRe.ReplaceAllString(html, "")
-	
+
 	// Remove HTML tags
 	tagRe := regexp.MustCompile(`<[^>]+>`)
 	text := tagRe.ReplaceAllString(html, " ")
-	
+
 	// Normalize whitespace
 	spaceRe := regexp.MustCompile(`\s+`)
 	text = spaceRe.ReplaceAllString(text, " ")
-	
+
 	return strings.TrimSpace(text)
 }

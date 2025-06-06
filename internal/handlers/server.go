@@ -53,24 +53,24 @@ func (s *Server) SetupRoutes() *mux.Router {
 
 	// Health check
 	api.HandleFunc("/health", s.healthHandler).Methods("GET")
-	
+
 	// RSS operations
 	api.HandleFunc("/rss/fetch/{feed}", s.fetchRSSHandler).Methods("GET")
 	api.HandleFunc("/rss/process/{feed}", s.processRSSHandler).Methods("POST")
-	
+
 	// Summary operations
 	api.HandleFunc("/summary", s.createSummaryHandler).Methods("POST")
-	
+
 	// Cache operations
 	api.HandleFunc("/cache/stats", s.cacheStatsHandler).Methods("GET")
 	api.HandleFunc("/cache/clear", s.cacheClearHandler).Methods("DELETE")
-	
+
 	// Slack operations
 	api.HandleFunc("/slack/notify", s.notifySlackHandler).Methods("POST")
-	
+
 	// Webhook endpoint (on-demand summarization)
 	api.HandleFunc("/webhook/summarize", s.webhookSummarizeHandler).Methods("POST")
-	
+
 	// Status and configuration
 	api.HandleFunc("/status", s.statusHandler).Methods("GET")
 	api.HandleFunc("/config", s.configHandler).Methods("GET")
@@ -85,7 +85,7 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 		"timestamp": time.Now().Unix(),
 		"version":   "v3.0.0",
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -198,12 +198,12 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		
+
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		
+
 		next.ServeHTTP(w, r)
 	})
 }
@@ -212,12 +212,12 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		
+
 		// Wrap the ResponseWriter to capture status code
 		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-		
+
 		next.ServeHTTP(wrapped, r)
-		
+
 		duration := time.Since(start)
 		log.Printf("%s %s %d %v", r.Method, r.URL.Path, wrapped.statusCode, duration)
 	})

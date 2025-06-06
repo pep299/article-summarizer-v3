@@ -22,8 +22,8 @@ type Client struct {
 // NewClient creates a new Slack client
 func NewClient(botToken, channel string) *Client {
 	return &Client{
-		botToken:   botToken,
-		channel:    channel,
+		botToken: botToken,
+		channel:  channel,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -59,7 +59,7 @@ func (c *Client) SendOnDemandSummary(ctx context.Context, article rss.Item, summ
 // formatRSSMessage creates a Slack message for RSS articles (same as v1)
 func (c *Client) formatRSSMessage(summary ArticleSummary) string {
 	timestamp := time.Now().In(time.FixedZone("JST", 9*3600)).Format("2006-01-02 15:04:05")
-	
+
 	return fmt.Sprintf(`🆕 *新しい記事を要約しました*
 
 *%s*
@@ -68,7 +68,7 @@ func (c *Client) formatRSSMessage(summary ArticleSummary) string {
 
 %s
 
-⏰ 処理時刻: %s`, 
+⏰ 処理時刻: %s`,
 		summary.RSS.Title,
 		summary.RSS.Source,
 		summary.RSS.Link,
@@ -83,7 +83,7 @@ func (c *Client) formatOnDemandMessage(article rss.Item, summary gemini.Summariz
 	if title == "" {
 		title = "タイトル取得中..."
 	}
-	
+
 	return fmt.Sprintf(`🔗 *オンデマンド要約リクエスト完了*
 
 *%s*
@@ -92,7 +92,7 @@ func (c *Client) formatOnDemandMessage(article rss.Item, summary gemini.Summariz
 %s
 
 📝 要約方法: オンデマンドAPI
-⏰ 処理時刻: %s`, 
+⏰ 処理時刻: %s`,
 		title,
 		article.Link,
 		summary.Summary,
