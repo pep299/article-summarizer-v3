@@ -17,17 +17,17 @@ func TestMain(m *testing.M) {
 	os.Setenv("SLACK_CHANNEL", "#test-channel")
 	os.Setenv("CACHE_TYPE", "memory")
 	os.Setenv("CACHE_DURATION_HOURS", "1")
-	
+
 	// Run tests
 	code := m.Run()
-	
+
 	// Clean up
 	os.Unsetenv("GEMINI_API_KEY")
 	os.Unsetenv("SLACK_BOT_TOKEN")
 	os.Unsetenv("SLACK_CHANNEL")
 	os.Unsetenv("CACHE_TYPE")
 	os.Unsetenv("CACHE_DURATION_HOURS")
-	
+
 	os.Exit(code)
 }
 
@@ -152,22 +152,10 @@ func TestIntegration_CacheManager(t *testing.T) {
 	}
 	defer server.Close()
 
-	ctx := context.Background()
-
-	// Test cache stats
-	stats, err := server.GetStats(ctx)
+	// Test server close
+	err = server.Close()
 	if err != nil {
-		t.Fatalf("Failed to get cache stats: %v", err)
-	}
-
-	if stats == nil {
-		t.Error("Expected cache stats but got nil")
-	}
-
-	// Test cache clear
-	err = server.Clear(ctx)
-	if err != nil {
-		t.Fatalf("Failed to clear cache: %v", err)
+		t.Fatalf("Failed to close server: %v", err)
 	}
 }
 
@@ -201,27 +189,25 @@ func TestIntegration_FeedConfiguration(t *testing.T) {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Verify expected feeds are configured
-	expectedFeeds := []string{"hatena", "lobsters"}
-	
-	for _, feedName := range expectedFeeds {
-		feedConfig, exists := cfg.RSSFeeds[feedName]
-		if !exists {
-			t.Errorf("Expected feed '%s' to be configured", feedName)
-			continue
-		}
+	// Verify expected feed URLs are configured
+	if cfg.HatenaRSSURL == "" {
+		t.Error("Expected HatenaRSSURL to be configured")
+	}
 
-		if feedConfig.Name == "" {
-			t.Errorf("Feed '%s' has empty name", feedName)
-		}
+	if cfg.LobstersRSSURL == "" {
+		t.Error("Expected LobstersRSSURL to be configured")
+	}
 
-		if feedConfig.URL == "" {
-			t.Errorf("Feed '%s' has empty URL", feedName)
-		}
+	// Check default URLs
+	expectedHatenaURL := "https://b.hatena.ne.jp/hotentry/it.rss"
+	expectedLobstersURL := "https://lobste.rs/rss"
 
-		if !feedConfig.Enabled {
-			t.Errorf("Feed '%s' should be enabled by default", feedName)
-		}
+	if cfg.HatenaRSSURL != expectedHatenaURL {
+		t.Errorf("Expected HatenaRSSURL to be '%s', got '%s'", expectedHatenaURL, cfg.HatenaRSSURL)
+	}
+
+	if cfg.LobstersRSSURL != expectedLobstersURL {
+		t.Errorf("Expected LobstersRSSURL to be '%s', got '%s'", expectedLobstersURL, cfg.LobstersRSSURL)
 	}
 }
 
@@ -255,12 +241,12 @@ func TestIntegration_ErrorPropagation(t *testing.T) {
 		if errorStr == "" {
 			t.Error("Error message should not be empty")
 		}
-		
+
 		// Should indicate which article and which step failed
 		if len(errorStr) < 10 {
 			t.Errorf("Error message seems too short: %s", errorStr)
 		}
-		
+
 		t.Logf("Got expected error: %v", err)
 	}
 }

@@ -23,8 +23,12 @@ type Config struct {
 	SlackChannel        string `json:"slack_channel"`
 	WebhookSlackChannel string `json:"webhook_slack_channel"`
 
+	// Webhook settings
+	WebhookAuthToken string `json:"-"` // Don't expose in JSON
+
 	// RSS settings
-	RSSFeeds map[string]RSSFeedConfig `json:"rss_feeds"`
+	HatenaRSSURL   string `json:"hatena_rss_url"`
+	LobstersRSSURL string `json:"lobsters_rss_url"`
 
 	// Cache settings
 	CacheType     string `json:"cache_type"`     // "memory"
@@ -52,22 +56,11 @@ func Load() (*Config, error) {
 		SlackBotToken:       getEnvOrDefault("SLACK_BOT_TOKEN", ""),
 		SlackChannel:        getEnvOrDefault("SLACK_CHANNEL", "#article-summarizer"),
 		WebhookSlackChannel: getEnvOrDefault("WEBHOOK_SLACK_CHANNEL", "#ondemand-article-summary"),
+		WebhookAuthToken:    getEnvOrDefault("WEBHOOK_AUTH_TOKEN", ""),
+		HatenaRSSURL:        getEnvOrDefault("HATENA_RSS_URL", "https://b.hatena.ne.jp/hotentry/it.rss"),
+		LobstersRSSURL:      getEnvOrDefault("LOBSTERS_RSS_URL", "https://lobste.rs/rss"),
 		CacheType:           getEnvOrDefault("CACHE_TYPE", "memory"),
 		CacheDuration:       getEnvOrDefaultInt("CACHE_DURATION_HOURS", 24),
-		RSSFeeds: map[string]RSSFeedConfig{
-			"hatena": {
-				Name:     "はてブ テクノロジー",
-				URL:      "https://b.hatena.ne.jp/hotentry/it.rss",
-				Enabled:  true,
-				Schedule: "0 */30 * * * *", // every 30 minutes
-			},
-			"lobsters": {
-				Name:     "Lobsters",
-				URL:      "https://lobste.rs/rss",
-				Enabled:  true,
-				Schedule: "0 */45 * * * *", // every 45 minutes
-			},
-		},
 	}
 
 	return config, config.validate()

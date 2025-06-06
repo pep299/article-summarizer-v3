@@ -2,6 +2,8 @@ package rss
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -200,7 +202,6 @@ func TestParseRSSXML(t *testing.T) {
 	}
 }
 
-
 func TestExtractTextFromHTML(t *testing.T) {
 	_ = NewClient()
 
@@ -249,5 +250,181 @@ func TestExtractTextFromHTML(t *testing.T) {
 	// Should not contain HTML tags
 	if strings.Contains(text, "<h1>") || strings.Contains(text, "</h1>") {
 		t.Error("Expected extracted text to not contain HTML tags")
+	}
+}
+
+// Test successful RSS feed fetch with mock server
+func TestFetchFeed_Success(t *testing.T) {
+	// Create mock RSS server
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify request method and headers
+		if r.Method != "GET" {
+			t.Errorf("Expected GET, got %s", r.Method)
+		}
+
+		userAgent := r.Header.Get("User-Agent")
+		if !strings.Contains(userAgent, "Article Summarizer Bot") {
+			t.Errorf("Expected User-Agent to contain 'Article Summarizer Bot', got '%s'", userAgent)
+		}
+
+		accept := r.Header.Get("Accept")
+		if !strings.Contains(accept, "application/rss+xml") {
+			t.Errorf("Expected Accept header to contain RSS MIME type, got '%s'", accept)
+		}
+
+		// Return mock RSS feed
+		w.Header().Set("Content-Type", "application/rss+xml")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+	<channel>
+		<title>Test RSS Feed</title>
+		<description>Test feed description</description>
+		<link>http://example.com</link>
+		<item>
+			<title>Test Article 1</title>
+			<link>http://example.com/article1</link>
+			<description>Description of article 1</description>
+			<pubDate>Mon, 02 Jan 2006 15:04:05 +0000</pubDate>
+			<guid>http://example.com/article1</guid>
+			<category>tech</category>
+		</item>
+		<item>
+			<title>Test Article 2</title>
+			<link>http://example.com/article2</link>
+			<description>Description of article 2</description>
+			<pubDate>Tue, 03 Jan 2006 10:30:00 +0000</pubDate>
+			<guid>http://example.com/article2</guid>
+			<category>news</category>
+		</item>
+	</channel>
+</rss>`))
+	}))
+	defer mockServer.Close()
+
+	client := NewClient()
+	ctx := context.Background()
+
+	items, err := client.FetchFeed(ctx, "Test Feed", mockServer.URL)
+	if err != nil {
+		t.Fatalf("Expected successful feed fetch, got error: %v", err)
+	}
+
+	if len(items) != 2 {
+		t.Fatalf("Expected 2 items, got %d", len(items))
+	}
+
+	// Verify first item
+	item1 := items[0]
+	if item1.Title != "Test Article 1" {
+		t.Errorf("Expected title 'Test Article 1', got '%s'", item1.Title)
+	}
+	if item1.Link != "http://example.com/article1" {
+		t.Errorf("Expected link 'http://example.com/article1', got '%s'", item1.Link)
+	}
+	if item1.Source != "Test Feed" {
+		t.Errorf("Expected source 'Test Feed', got '%s'", item1.Source)
+	}
+	if item1.GUID != "http://example.com/article1" {
+		t.Errorf("Expected GUID 'http://example.com/article1', got '%s'", item1.GUID)
+	}
+
+	// Verify parsed date is set
+	if item1.ParsedDate.IsZero() {
+		t.Error("Expected parsed date to be set")
+	}
+
+	// Verify categories
+	if len(item1.Category) == 0 || item1.Category[0] != "tech" {
+		t.Errorf("Expected category 'tech', got %v", item1.Category)
+	}
+}
+
+func TestFetchFeed_RDFFormat(t *testing.T) {
+	// Create mock RSS server with RDF format
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rdf+xml")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns="http://purl.org/rss/1.0/">
+	<item>
+		<title>RDF Article 1</title>
+		<link>http://example.com/rdf1</link>
+		<description>RDF article description</description>
+		<category>technology</category>
+	</item>
+	<item>
+		<title>RDF Article 2</title>
+		<link>http://example.com/rdf2</link>
+		<description>Another RDF article</description>
+		<category>programming</category>
+	</item>
+</rdf:RDF>`))
+	}))
+	defer mockServer.Close()
+
+	client := NewClient()
+	ctx := context.Background()
+
+	items, err := client.FetchFeed(ctx, "RDF Feed", mockServer.URL)
+	if err != nil {
+		t.Fatalf("Expected successful RDF feed fetch, got error: %v", err)
+	}
+
+	if len(items) != 2 {
+		t.Fatalf("Expected 2 items, got %d", len(items))
+	}
+
+	// Verify RDF items
+	item1 := items[0]
+	if item1.Title != "RDF Article 1" {
+		t.Errorf("Expected title 'RDF Article 1', got '%s'", item1.Title)
+	}
+	if item1.Source != "RDF Feed" {
+		t.Errorf("Expected source 'RDF Feed', got '%s'", item1.Source)
+	}
+}
+
+func TestFetchFeed_HTTPError(t *testing.T) {
+	// Create mock server that returns HTTP error
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("Not Found"))
+	}))
+	defer mockServer.Close()
+
+	client := NewClient()
+	ctx := context.Background()
+
+	_, err := client.FetchFeed(ctx, "Test Feed", mockServer.URL)
+	if err == nil {
+		t.Error("Expected error for HTTP 404, but got none")
+	}
+
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("Expected error to mention status code, got: %v", err)
+	}
+}
+
+func TestFetchFeed_InvalidXML(t *testing.T) {
+	// Create mock server that returns invalid XML
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`<invalid>xml content without proper RSS structure</invalid>`))
+	}))
+	defer mockServer.Close()
+
+	client := NewClient()
+	ctx := context.Background()
+
+	_, err := client.FetchFeed(ctx, "Test Feed", mockServer.URL)
+	if err == nil {
+		t.Error("Expected error for invalid RSS XML, but got none")
+	}
+
+	if !strings.Contains(err.Error(), "unable to parse RSS format") {
+		t.Errorf("Expected parse error, got: %v", err)
 	}
 }

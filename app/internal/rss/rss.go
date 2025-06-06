@@ -21,10 +21,10 @@ type Feed struct {
 
 // HatenaFeed represents a Hatena RSS feed
 type HatenaFeed struct {
-	Title       string        `xml:"channel>title"`
-	Description string        `xml:"channel>description"`
-	Link        string        `xml:"channel>link"`
-	Items       []HatenaItem  `xml:"channel>item"`
+	Title       string       `xml:"channel>title"`
+	Description string       `xml:"channel>description"`
+	Link        string       `xml:"channel>link"`
+	Items       []HatenaItem `xml:"channel>item"`
 }
 
 // LobstersFeed represents a Lobsters RSS feed
@@ -42,7 +42,7 @@ type RSSItem interface {
 	GetDescription() string
 	GetPubDate() string
 	GetParsedDate() time.Time
-	GetUniqueID() string   // GUID, Link, or other unique identifier
+	GetUniqueID() string // GUID, Link, or other unique identifier
 	GetSource() string
 	GetCategories() []string
 	SetSource(source string)
@@ -62,14 +62,14 @@ type Item struct {
 }
 
 // Implement RSSItem interface for generic Item
-func (i *Item) GetTitle() string       { return i.Title }
-func (i *Item) GetLink() string        { return i.Link }
-func (i *Item) GetDescription() string { return i.Description }
-func (i *Item) GetPubDate() string     { return i.PubDate }
-func (i *Item) GetParsedDate() time.Time { return i.ParsedDate }
-func (i *Item) GetSource() string      { return i.Source }
-func (i *Item) GetCategories() []string { return i.Category }
-func (i *Item) SetSource(source string) { i.Source = source }
+func (i *Item) GetTitle() string             { return i.Title }
+func (i *Item) GetLink() string              { return i.Link }
+func (i *Item) GetDescription() string       { return i.Description }
+func (i *Item) GetPubDate() string           { return i.PubDate }
+func (i *Item) GetParsedDate() time.Time     { return i.ParsedDate }
+func (i *Item) GetSource() string            { return i.Source }
+func (i *Item) GetCategories() []string      { return i.Category }
+func (i *Item) SetSource(source string)      { i.Source = source }
 func (i *Item) SetParsedDate(date time.Time) { i.ParsedDate = date }
 
 func (i *Item) GetUniqueID() string {
@@ -85,21 +85,21 @@ type HatenaItem struct {
 	Link        string    `xml:"link"`
 	Description string    `xml:"description"`
 	PubDate     string    `xml:"pubDate"`
-	GUID        string    `xml:"guid"`        // Always present in Hatena
-	Category    []string  `xml:"category"`    // Categories available
+	GUID        string    `xml:"guid"`     // Always present in Hatena
+	Category    []string  `xml:"category"` // Categories available
 	ParsedDate  time.Time `xml:"-"`
 	Source      string    `xml:"-"`
 }
 
 // Implement RSSItem interface for HatenaItem
-func (h *HatenaItem) GetTitle() string       { return h.Title }
-func (h *HatenaItem) GetLink() string        { return h.Link }
-func (h *HatenaItem) GetDescription() string { return h.Description }
-func (h *HatenaItem) GetPubDate() string     { return h.PubDate }
-func (h *HatenaItem) GetParsedDate() time.Time { return h.ParsedDate }
-func (h *HatenaItem) GetSource() string      { return h.Source }
-func (h *HatenaItem) GetCategories() []string { return h.Category }
-func (h *HatenaItem) SetSource(source string) { h.Source = source }
+func (h *HatenaItem) GetTitle() string             { return h.Title }
+func (h *HatenaItem) GetLink() string              { return h.Link }
+func (h *HatenaItem) GetDescription() string       { return h.Description }
+func (h *HatenaItem) GetPubDate() string           { return h.PubDate }
+func (h *HatenaItem) GetParsedDate() time.Time     { return h.ParsedDate }
+func (h *HatenaItem) GetSource() string            { return h.Source }
+func (h *HatenaItem) GetCategories() []string      { return h.Category }
+func (h *HatenaItem) SetSource(source string)      { h.Source = source }
 func (h *HatenaItem) SetParsedDate(date time.Time) { h.ParsedDate = date }
 
 func (h *HatenaItem) GetUniqueID() string {
@@ -112,25 +112,25 @@ func (h *HatenaItem) GetUniqueID() string {
 
 // LobstersItem represents a Lobsters RSS item
 type LobstersItem struct {
-	Title       string    `xml:"title"`
-	Link        string    `xml:"link"`
-	Description string    `xml:"description"`
-	PubDate     string    `xml:"pubDate"`
+	Title       string `xml:"title"`
+	Link        string `xml:"link"`
+	Description string `xml:"description"`
+	PubDate     string `xml:"pubDate"`
 	// No GUID field - Lobsters doesn't provide it
 	// No Category field - Lobsters uses tags differently
-	ParsedDate  time.Time `xml:"-"`
-	Source      string    `xml:"-"`
+	ParsedDate time.Time `xml:"-"`
+	Source     string    `xml:"-"`
 }
 
 // Implement RSSItem interface for LobstersItem
-func (l *LobstersItem) GetTitle() string       { return l.Title }
-func (l *LobstersItem) GetLink() string        { return l.Link }
-func (l *LobstersItem) GetDescription() string { return l.Description }
-func (l *LobstersItem) GetPubDate() string     { return l.PubDate }
-func (l *LobstersItem) GetParsedDate() time.Time { return l.ParsedDate }
-func (l *LobstersItem) GetSource() string      { return l.Source }
-func (l *LobstersItem) GetCategories() []string { return []string{} } // No categories in Lobsters
-func (l *LobstersItem) SetSource(source string) { l.Source = source }
+func (l *LobstersItem) GetTitle() string             { return l.Title }
+func (l *LobstersItem) GetLink() string              { return l.Link }
+func (l *LobstersItem) GetDescription() string       { return l.Description }
+func (l *LobstersItem) GetPubDate() string           { return l.PubDate }
+func (l *LobstersItem) GetParsedDate() time.Time     { return l.ParsedDate }
+func (l *LobstersItem) GetSource() string            { return l.Source }
+func (l *LobstersItem) GetCategories() []string      { return []string{} } // No categories in Lobsters
+func (l *LobstersItem) SetSource(source string)      { l.Source = source }
 func (l *LobstersItem) SetParsedDate(date time.Time) { l.ParsedDate = date }
 
 func (l *LobstersItem) GetUniqueID() string {
@@ -285,7 +285,6 @@ func GetUniqueItems(items []Item) []Item {
 
 	return unique
 }
-
 
 // extractTextFromHTML extracts text content from HTML (for testing)
 func extractTextFromHTML(html string) string {

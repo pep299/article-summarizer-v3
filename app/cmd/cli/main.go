@@ -62,19 +62,15 @@ func main() {
 
 	ctx := context.Background()
 
-	// Process all enabled RSS feeds one by one (v1 style)
-	for feedName, feedConfig := range cfg.RSSFeeds {
-		if !feedConfig.Enabled {
-			log.Printf("Skipping disabled feed: %s", feedName)
-			continue
-		}
-
-		log.Printf("🚀 Processing feed: %s", feedConfig.Name)
+	// Process all RSS feeds one by one (v1 style)
+	feeds := []string{"hatena", "lobsters"}
+	for _, feedName := range feeds {
+		log.Printf("🚀 Processing feed: %s", feedName)
 		err = server.ProcessSingleFeed(ctx, feedName)
 		if err != nil {
-			log.Printf("❌ Processing failed for %s: %v", feedConfig.Name, err)
+			log.Printf("❌ Processing failed for %s: %v", feedName, err)
 		} else {
-			log.Printf("✅ Processing completed for %s", feedConfig.Name)
+			log.Printf("✅ Processing completed for %s", feedName)
 		}
 	}
 

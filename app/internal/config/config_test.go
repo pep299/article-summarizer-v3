@@ -50,19 +50,22 @@ func TestLoadConfig(t *testing.T) {
 	}
 
 	// Check RSS feeds configuration
-	if len(cfg.RSSFeeds) != 2 {
-		t.Errorf("Expected 2 RSS feeds, got %d", len(cfg.RSSFeeds))
+	if cfg.HatenaRSSURL == "" {
+		t.Error("Expected HatenaRSSURL to be configured")
 	}
 
-	if hatena, exists := cfg.RSSFeeds["hatena"]; exists {
-		if hatena.Name != "はてブ テクノロジー" {
-			t.Errorf("Expected hatena name to be 'はてブ テクノロジー', got '%s'", hatena.Name)
-		}
-		if !hatena.Enabled {
-			t.Error("Expected hatena feed to be enabled")
-		}
-	} else {
-		t.Error("Expected hatena feed to exist")
+	if cfg.LobstersRSSURL == "" {
+		t.Error("Expected LobstersRSSURL to be configured")
+	}
+
+	expectedHatenaURL := "https://b.hatena.ne.jp/hotentry/it.rss"
+	if cfg.HatenaRSSURL != expectedHatenaURL {
+		t.Errorf("Expected HatenaRSSURL to be '%s', got '%s'", expectedHatenaURL, cfg.HatenaRSSURL)
+	}
+
+	expectedLobstersURL := "https://lobste.rs/rss"
+	if cfg.LobstersRSSURL != expectedLobstersURL {
+		t.Errorf("Expected LobstersRSSURL to be '%s', got '%s'", expectedLobstersURL, cfg.LobstersRSSURL)
 	}
 }
 

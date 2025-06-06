@@ -16,7 +16,7 @@ import (
 func init() {
 	// Register HTTP function for manual triggers and webhooks
 	functions.HTTP("SummarizeArticles", SummarizeArticles)
-	
+
 	// Register Cloud Scheduler function for scheduled RSS processing
 	functions.CloudEvent("ProcessRSSScheduled", ProcessRSSScheduled)
 }
@@ -24,7 +24,7 @@ func init() {
 // SummarizeArticles is the HTTP function for webhook requests and manual triggers
 func SummarizeArticles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -44,13 +44,27 @@ func SummarizeArticles(w http.ResponseWriter, r *http.Request) {
 	// Simple path-based routing
 	switch r.URL.Path {
 	case "/process":
+		// Check authentication for POST requests
+		if r.Method == "POST" {
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "Failed to parse form data", http.StatusBadRequest)
+				return
+			}
+
+			token := r.FormValue("token")
+			if cfg.WebhookAuthToken != "" && token != cfg.WebhookAuthToken {
+				http.Error(w, "Unauthorized", http.StatusForbidden)
+				return
+			}
+		}
+
 		// Get feed name from query parameter
 		feedName := r.URL.Query().Get("feed")
 		if feedName == "" {
 			http.Error(w, "Missing 'feed' query parameter", http.StatusBadRequest)
 			return
 		}
-		
+
 		// Process the specific RSS feed
 		log.Printf("🕐 Processing RSS feed via HTTP: %s", feedName)
 		if err := server.ProcessSingleFeed(ctx, feedName); err != nil {
@@ -58,16 +72,16 @@ func SummarizeArticles(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Failed to process feed: %v", err), http.StatusInternalServerError)
 			return
 		}
-		
+
 		log.Printf("✅ Successfully processed RSS feed via HTTP: %s", feedName)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status": "success",
-			"feed":   feedName,
+			"status":  "success",
+			"feed":    feedName,
 			"message": "Feed processed successfully",
 		})
-		
+
 	default:
 		http.NotFound(w, r)
 	}
@@ -108,20 +122,18 @@ func ProcessRSSScheduled(ctx context.Context, e event.Event) error {
 	} else {
 		// Process all enabled feeds if no specific feed is specified
 		log.Printf("🕐 Processing all enabled RSS feeds")
-		for feedName, feedConfig := range cfg.RSSFeeds {
-			if feedConfig.Enabled {
-				if err := server.ProcessSingleFeed(ctx, feedName); err != nil {
-					log.Printf("❌ Failed to process feed %s: %v", feedName, err)
-				} else {
-					log.Printf("✅ Successfully processed feed: %s", feedName)
-				}
+		feeds := []string{"hatena", "lobsters"}
+		for _, feedName := range feeds {
+			if err := server.ProcessSingleFeed(ctx, feedName); err != nil {
+				log.Printf("❌ Failed to process feed %s: %v", feedName, err)
+			} else {
+				log.Printf("✅ Successfully processed feed: %s", feedName)
 			}
 		}
 	}
 
 	return nil
 }
-
 
 func main() {
 	// This main function is required for Cloud Functions

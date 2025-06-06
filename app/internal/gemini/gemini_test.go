@@ -144,6 +144,103 @@ func TestBuildOnDemandPrompt(t *testing.T) {
 	}
 }
 
+// Test successful API calls with mock server
+func TestSummarizeURL_Success(t *testing.T) {
+	// Create a mock server that returns a successful response
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate HTML content endpoint
+		if strings.Contains(r.URL.Path, "test-article") {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><body><h1>Test Article</h1><p>This is test content.</p></body></html>`))
+			return
+		}
+
+		// Simulate Gemini API endpoint
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"candidates": [{
+				"content": {
+					"parts": [{
+						"text": "これはテスト記事の要約です。技術的な内容について説明しています。"
+					}]
+				}
+			}]
+		}`))
+	}))
+	defer mockServer.Close()
+
+	// Create client with mock server URL for Gemini API
+	client := NewClient("test-api-key", "gemini-2.5-flash")
+	client.baseURL = mockServer.URL
+
+	ctx := context.Background()
+	testURL := mockServer.URL + "/test-article"
+
+	result, err := client.SummarizeURL(ctx, testURL)
+	if err != nil {
+		t.Fatalf("Expected successful summarization, got error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Expected non-nil result")
+	}
+
+	expectedSummary := "これはテスト記事の要約です。技術的な内容について説明しています。"
+	if result.Summary != expectedSummary {
+		t.Errorf("Expected summary '%s', got '%s'", expectedSummary, result.Summary)
+	}
+}
+
+func TestSummarizeURLForOnDemand_Success(t *testing.T) {
+	// Create a mock server that returns a successful response
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate HTML content endpoint
+		if strings.Contains(r.URL.Path, "test-article") {
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`<html><body><h1>Test Article</h1><p>This is detailed test content for on-demand summary.</p></body></html>`))
+			return
+		}
+
+		// Simulate Gemini API endpoint
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"candidates": [{
+				"content": {
+					"parts": [{
+						"text": "これはオンデマンド記事の詳細な要約です。より詳しい説明が含まれています。"
+					}]
+				}
+			}]
+		}`))
+	}))
+	defer mockServer.Close()
+
+	// Create client with mock server URL
+	client := NewClient("test-api-key", "gemini-2.5-flash")
+	client.baseURL = mockServer.URL
+
+	ctx := context.Background()
+	testURL := mockServer.URL + "/test-article"
+
+	result, err := client.SummarizeURLForOnDemand(ctx, testURL)
+	if err != nil {
+		t.Fatalf("Expected successful summarization, got error: %v", err)
+	}
+
+	if result == nil {
+		t.Fatal("Expected non-nil result")
+	}
+
+	expectedSummary := "これはオンデマンド記事の詳細な要約です。より詳しい説明が含まれています。"
+	if result.Summary != expectedSummary {
+		t.Errorf("Expected summary '%s', got '%s'", expectedSummary, result.Summary)
+	}
+}
+
 func TestFetchHTMLErrorHandling(t *testing.T) {
 	client := NewClient("test-key", "test-model")
 	ctx := context.Background()

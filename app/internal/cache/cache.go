@@ -127,9 +127,6 @@ func (c *CloudStorageCache) Get(ctx context.Context, key string) (*CacheEntry, e
 		return nil, fmt.Errorf("unmarshaling cache entry: %w", err)
 	}
 
-
-
-
 	return &entry, nil
 }
 
@@ -280,7 +277,6 @@ func (c *MemoryCache) Get(ctx context.Context, key string) (*CacheEntry, error) 
 		return nil, ErrCacheMiss
 	}
 
-
 	c.mutex.RUnlock()
 
 	// Need write lock to update access information
@@ -397,16 +393,15 @@ func (c *MemoryCache) cleanup() {
 	}
 }
 
-
 // Close stops the cleanup goroutine and closes the cache
 func (c *MemoryCache) Close() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	if c.closed {
 		return nil // Already closed
 	}
-	
+
 	c.closed = true
 	close(c.stopCleanup)
 	return nil
@@ -437,7 +432,6 @@ func NewManager(cacheType string, duration time.Duration) (*Manager, error) {
 	return &Manager{cache: cache}, nil
 }
 
-
 // MarkAsProcessed marks an RSS item as processed
 func (m *Manager) MarkAsProcessed(ctx context.Context, item rss.Item) error {
 	key := GenerateKey(item)
@@ -456,18 +450,6 @@ func (m *Manager) MarkAsProcessed(ctx context.Context, item rss.Item) error {
 func (m *Manager) IsCached(ctx context.Context, item rss.Item) (bool, error) {
 	key := GenerateKey(item)
 	return m.cache.Exists(ctx, key)
-}
-
-
-
-// GetStats returns cache statistics
-func (m *Manager) GetStats(ctx context.Context) (*Stats, error) {
-	return m.cache.GetStats(ctx)
-}
-
-// Clear clears all cached entries
-func (m *Manager) Clear(ctx context.Context) error {
-	return m.cache.Clear(ctx)
 }
 
 // Close closes the cache and stops background goroutines

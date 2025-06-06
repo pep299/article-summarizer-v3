@@ -29,8 +29,6 @@ type SlackClient interface {
 type CacheManager interface {
 	IsCached(ctx context.Context, item rss.Item) (bool, error)
 	MarkAsProcessed(ctx context.Context, item rss.Item) error
-	GetStats(ctx context.Context) (*cache.Stats, error)
-	Clear(ctx context.Context) error
 	Close() error
 }
 
@@ -73,38 +71,41 @@ func NewServerWithDeps(cfg *config.Config, rssClient RSSClient, geminiClient Gem
 
 // ProcessSingleFeed processes a single RSS feed (v1 style: sync processing)
 func (s *Server) ProcessSingleFeed(ctx context.Context, feedName string) error {
-	feedConfig, exists := s.config.RSSFeeds[feedName]
-	if !exists {
+	var feedDisplayName, feedURL string
+
+	switch feedName {
+	case "hatena":
+		feedDisplayName = "はてブ テクノロジー"
+		feedURL = s.config.HatenaRSSURL
+	case "lobsters":
+		feedDisplayName = "Lobsters"
+		feedURL = s.config.LobstersRSSURL
+	default:
 		return fmt.Errorf("feed %s not found", feedName)
 	}
 
-	if !feedConfig.Enabled {
-		log.Printf("Feed %s is disabled, skipping", feedName)
-		return nil
-	}
-
-	log.Printf("📡 RSS取得開始: %s", feedConfig.Name)
+	log.Printf("📡 RSS取得開始: %s", feedDisplayName)
 
 	// 1. RSS記事取得 (sync, no concurrency)
-	articles, err := s.rssClient.FetchFeed(ctx, feedConfig.Name, feedConfig.URL)
+	articles, err := s.rssClient.FetchFeed(ctx, feedDisplayName, feedURL)
 	if err != nil {
 		return fmt.Errorf("fetching RSS feed %s: %w", feedName, err)
 	}
 
-	log.Printf("📄 %d件の記事を取得: %s", len(articles), feedConfig.Name)
+	log.Printf("📄 %d件の記事を取得: %s", len(articles), feedDisplayName)
 
 	if len(articles) == 0 {
-		log.Printf("📋 新着記事はありませんでした: %s", feedConfig.Name)
+		log.Printf("📋 新着記事はありませんでした: %s", feedDisplayName)
 		return nil
 	}
 
 	// 2. 重複除去
 	uniqueArticles := rss.GetUniqueItems(articles)
-	log.Printf("Found %d unique articles from %s", len(uniqueArticles), feedConfig.Name)
+	log.Printf("Found %d unique articles from %s", len(uniqueArticles), feedDisplayName)
 
 	// 3. フィルタリング (only remove "ask" category)
 	filteredArticles := rss.FilterItems(uniqueArticles)
-	log.Printf("After filtering: %d articles remain from %s", len(filteredArticles), feedConfig.Name)
+	log.Printf("After filtering: %d articles remain from %s", len(filteredArticles), feedDisplayName)
 
 	// 4. キャッシュチェック（既に処理済みを除外）
 	uncachedArticles := []rss.Item{}
@@ -118,10 +119,10 @@ func (s *Server) ProcessSingleFeed(ctx context.Context, feedName string) error {
 		}
 	}
 
-	log.Printf("Processing %d new articles from %s", len(uncachedArticles), feedConfig.Name)
+	log.Printf("Processing %d new articles from %s", len(uncachedArticles), feedDisplayName)
 
 	if len(uncachedArticles) == 0 {
-		log.Printf("✅ 新着記事はありません: %s", feedConfig.Name)
+		log.Printf("✅ 新着記事はありません: %s", feedDisplayName)
 		return nil
 	}
 
@@ -132,7 +133,7 @@ func (s *Server) ProcessSingleFeed(ctx context.Context, feedName string) error {
 		}
 	}
 
-	log.Printf("🎉 %s処理完了: %d件成功", feedConfig.Name, len(uncachedArticles))
+	log.Printf("🎉 %s処理完了: %d件成功", feedDisplayName, len(uncachedArticles))
 	return nil
 }
 
@@ -165,16 +166,6 @@ func (s *Server) processArticle(ctx context.Context, article rss.Item) error {
 	duration := time.Since(startTime)
 	log.Printf("✅ 記事処理完了: %s (所要時間: %v)", article.Title, duration)
 	return nil
-}
-
-// GetStats returns cache statistics
-func (s *Server) GetStats(ctx context.Context) (*cache.Stats, error) {
-	return s.cacheManager.GetStats(ctx)
-}
-
-// Clear clears all cached entries
-func (s *Server) Clear(ctx context.Context) error {
-	return s.cacheManager.Clear(ctx)
 }
 
 // Close closes the server and cleans up resources
