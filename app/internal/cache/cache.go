@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/pep299/article-summarizer-v3/internal/gemini"
 	"github.com/pep299/article-summarizer-v3/internal/rss"
 	"google.golang.org/api/iterator"
 )
@@ -430,8 +429,8 @@ func NewManager(cacheType string, duration time.Duration) (*Manager, error) {
 }
 
 
-// SetSummary caches a summary for an RSS item
-func (m *Manager) SetSummary(ctx context.Context, item rss.Item, summary gemini.SummarizeResponse) error {
+// MarkAsProcessed marks an RSS item as processed
+func (m *Manager) MarkAsProcessed(ctx context.Context, item rss.Item) error {
 	key := GenerateKey(item)
 	entry := &CacheEntry{
 		Title:         item.Title,

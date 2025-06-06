@@ -200,49 +200,6 @@ func TestParseRSSXML(t *testing.T) {
 	}
 }
 
-func TestGenerateKey(t *testing.T) {
-	tests := []struct {
-		name string
-		item Item
-	}{
-		{
-			name: "with GUID",
-			item: Item{
-				Title: "Test Article",
-				Link:  "http://example.com/test",
-				GUID:  "test-guid",
-			},
-		},
-		{
-			name: "without GUID",
-			item: Item{
-				Title: "Test Article",
-				Link:  "http://example.com/test",
-				GUID:  "",
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			key := generateKey(test.item)
-
-			if key == "" {
-				t.Error("Expected non-empty key")
-			}
-
-			if !strings.HasPrefix(key, "article:") {
-				t.Errorf("Expected key to start with 'article:', got '%s'", key)
-			}
-
-			// Key should be consistent for the same item
-			key2 := generateKey(test.item)
-			if key != key2 {
-				t.Errorf("Expected consistent key generation, got '%s' and '%s'", key, key2)
-			}
-		})
-	}
-}
 
 func TestExtractTextFromHTML(t *testing.T) {
 	_ = NewClient()

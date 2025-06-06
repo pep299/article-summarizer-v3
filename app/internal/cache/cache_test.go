@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pep299/article-summarizer-v3/internal/gemini"
 	"github.com/pep299/article-summarizer-v3/internal/rss"
 )
 
@@ -204,14 +203,10 @@ func TestCacheManager(t *testing.T) {
 		ParsedDate: time.Now(),
 	}
 
-	summary := gemini.SummarizeResponse{
-		Summary: "Test summary",
-	}
-
-	// Test SetSummary
-	err = manager.SetSummary(ctx, item, summary)
+	// Test MarkAsProcessed
+	err = manager.MarkAsProcessed(ctx, item)
 	if err != nil {
-		t.Fatalf("Failed to set summary: %v", err)
+		t.Fatalf("Failed to mark as processed: %v", err)
 	}
 
 	// Test IsCached
@@ -443,14 +438,10 @@ func TestCacheManagerCloudStorage(t *testing.T) {
 		ParsedDate: time.Now(),
 	}
 
-	summary := gemini.SummarizeResponse{
-		Summary: "Test summary",
-	}
-
-	// Test SetSummary
-	err = manager.SetSummary(ctx, item, summary)
+	// Test MarkAsProcessed
+	err = manager.MarkAsProcessed(ctx, item)
 	if err != nil {
-		t.Fatalf("Failed to set summary: %v", err)
+		t.Fatalf("Failed to mark as processed: %v", err)
 	}
 
 	// Test IsCached

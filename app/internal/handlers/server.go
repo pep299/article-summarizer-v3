@@ -130,8 +130,8 @@ func (s *Server) processArticle(ctx context.Context, article rss.Item) error {
 	}
 
 	// Slack通知成功後にキャッシュに保存
-	if err := s.cacheManager.SetSummary(ctx, article, *summary); err != nil {
-		log.Printf("Error caching summary for %s: %v", article.Title, err)
+	if err := s.cacheManager.MarkAsProcessed(ctx, article); err != nil {
+		log.Printf("Error caching article for %s: %v", article.Title, err)
 	}
 
 	duration := time.Since(startTime)
