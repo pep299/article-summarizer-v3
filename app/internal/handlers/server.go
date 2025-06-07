@@ -26,19 +26,15 @@ type SlackClient interface {
 	SendArticleSummary(ctx context.Context, summary slack.ArticleSummary) error
 }
 
-type CacheManager interface {
-	IsCached(ctx context.Context, item rss.Item) (bool, error)
-	MarkAsProcessed(ctx context.Context, item rss.Item) error
-	Close() error
-}
 
 // Server holds the dependencies for RSS processing
 type Server struct {
-	config       *config.Config
-	rssClient    RSSClient
-	geminiClient GeminiClient
-	slackClient  SlackClient
-	cacheManager CacheManager
+	config             *config.Config
+	rssClient          RSSClient
+	geminiClient       GeminiClient
+	slackClient        SlackClient
+	webhookSlackClient SlackClient
+	cacheManager       *cache.CloudStorageCache
 }
 
 // NewServer creates a new server instance
@@ -50,22 +46,24 @@ func NewServer(cfg *config.Config) (*Server, error) {
 	}
 
 	return &Server{
-		config:       cfg,
-		rssClient:    rss.NewClient(),
-		geminiClient: gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiModel),
-		slackClient:  slack.NewClient(cfg.SlackBotToken, cfg.SlackChannel),
-		cacheManager: cacheManager,
+		config:             cfg,
+		rssClient:          rss.NewClient(),
+		geminiClient:       gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiModel),
+		slackClient:        slack.NewClient(cfg.SlackBotToken, cfg.SlackChannel),
+		webhookSlackClient: slack.NewClient(cfg.SlackBotToken, cfg.WebhookSlackChannel),
+		cacheManager:       cacheManager,
 	}, nil
 }
 
-// NewServerWithDeps creates a new server instance with provided dependencies (for testing)
-func NewServerWithDeps(cfg *config.Config, rssClient RSSClient, geminiClient GeminiClient, slackClient SlackClient, cacheManager CacheManager) *Server {
+// NewServerWithDeps creates a new server instance with provided dependencies (for testing)  
+func NewServerWithDeps(cfg *config.Config, rssClient RSSClient, geminiClient GeminiClient, slackClient SlackClient, webhookSlackClient SlackClient, cacheManager *cache.CloudStorageCache) *Server {
 	return &Server{
-		config:       cfg,
-		rssClient:    rssClient,
-		geminiClient: geminiClient,
-		slackClient:  slackClient,
-		cacheManager: cacheManager,
+		config:             cfg,
+		rssClient:          rssClient,
+		geminiClient:       geminiClient,
+		slackClient:        slackClient,
+		webhookSlackClient: slackClient, // Use same client for testing
+		cacheManager:       cacheManager,
 	}
 }
 
@@ -110,11 +108,16 @@ func (s *Server) ProcessSingleFeed(ctx context.Context, feedName string) error {
 	// 4. キャッシュチェック（既に処理済みを除外）
 	uncachedArticles := []rss.Item{}
 	for _, article := range filteredArticles {
-		cached, err := s.cacheManager.IsCached(ctx, article)
-		if err != nil {
-			return fmt.Errorf("checking cache for article %s: %w", article.Title, err)
-		}
-		if !cached {
+		if s.cacheManager != nil {
+			cached, err := cache.IsCached(ctx, s.cacheManager, article)
+			if err != nil {
+				return fmt.Errorf("checking cache for article %s: %w", article.Title, err)
+			}
+			if !cached {
+				uncachedArticles = append(uncachedArticles, article)
+			}
+		} else {
+			// If cache manager is nil, treat all articles as uncached
 			uncachedArticles = append(uncachedArticles, article)
 		}
 	}
@@ -137,15 +140,68 @@ func (s *Server) ProcessSingleFeed(ctx context.Context, feedName string) error {
 	return nil
 }
 
+// ProcessSingleURL processes a single URL and sends summary to webhook Slack channel
+func (s *Server) ProcessSingleURL(ctx context.Context, url string) error {
+	startTime := time.Now()
+	log.Printf("🔍 オンデマンド記事処理開始: %s", url)
+
+	// Check if Gemini client is available
+	if s.geminiClient == nil {
+		return fmt.Errorf("gemini client is not initialized")
+	}
+
+	// Gemini APIで要約
+	summary, err := s.geminiClient.SummarizeURL(ctx, url)
+	if err != nil {
+		return fmt.Errorf("summarizing URL: %w", err)
+	}
+
+	// Check if webhook Slack client is available
+	if s.webhookSlackClient == nil {
+		return fmt.Errorf("webhook slack client is not initialized")
+	}
+
+	// Create a minimal RSS item for the URL
+	article := rss.Item{
+		Title:  url, // Use URL as title since SummarizeResponse doesn't have Title
+		Link:   url,
+		Source: "オンデマンドリクエスト",
+	}
+
+	// Send to webhook Slack channel using the webhook client
+	articleSummary := slack.ArticleSummary{
+		RSS:     article,
+		Summary: *summary,
+	}
+
+	if err := s.webhookSlackClient.SendArticleSummary(ctx, articleSummary); err != nil {
+		return fmt.Errorf("sending webhook Slack notification: %w", err)
+	}
+
+	duration := time.Since(startTime)
+	log.Printf("✅ オンデマンド記事処理完了: %s (所要時間: %v)", url, duration)
+	return nil
+}
+
 // processArticle processes a single article (sync, like v1)
 func (s *Server) processArticle(ctx context.Context, article rss.Item) error {
 	startTime := time.Now()
 	log.Printf("🔍 記事処理開始: %s", article.Title)
 
+	// Check if Gemini client is available
+	if s.geminiClient == nil {
+		return fmt.Errorf("gemini client is not initialized")
+	}
+
 	// Gemini APIで要約 (sync)
 	summary, err := s.geminiClient.SummarizeURL(ctx, article.Link)
 	if err != nil {
 		return fmt.Errorf("summarizing article: %w", err)
+	}
+
+	// Check if Slack client is available
+	if s.slackClient == nil {
+		return fmt.Errorf("slack client is not initialized")
 	}
 
 	// Slack通知 (1件ずつ)
@@ -159,8 +215,10 @@ func (s *Server) processArticle(ctx context.Context, article rss.Item) error {
 	}
 
 	// Slack通知成功後にキャッシュに保存
-	if err := s.cacheManager.MarkAsProcessed(ctx, article); err != nil {
-		return fmt.Errorf("caching article: %w", err)
+	if s.cacheManager != nil {
+		if err := cache.MarkAsProcessed(ctx, s.cacheManager, article); err != nil {
+			return fmt.Errorf("caching article: %w", err)
+		}
 	}
 
 	duration := time.Since(startTime)
@@ -170,5 +228,8 @@ func (s *Server) processArticle(ctx context.Context, article rss.Item) error {
 
 // Close closes the server and cleans up resources
 func (s *Server) Close() error {
-	return s.cacheManager.Close()
+	if s.cacheManager != nil {
+		return s.cacheManager.Close()
+	}
+	return nil
 }

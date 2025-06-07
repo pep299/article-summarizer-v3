@@ -3,7 +3,7 @@ resources:
   type: gcp-types/storage-v1:buckets
   properties:
     name: {{ properties["name"] }}
-    location: {{ properties.get("location", "us-central1") }}
+    location: {{ properties.get("location", "asia-northeast1") }}
     storageClass: {{ properties.get("storageClass", "STANDARD") }}
     versioning:
       enabled: {{ properties.get("versioning", false) }}

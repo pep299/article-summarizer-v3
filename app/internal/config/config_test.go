@@ -29,8 +29,8 @@ func TestLoadConfig(t *testing.T) {
 		t.Errorf("Expected Port to be '8080', got '%s'", cfg.Port)
 	}
 
-	if cfg.GeminiModel != "gemini-2.5-flash" {
-		t.Errorf("Expected GeminiModel to be 'gemini-2.5-flash', got '%s'", cfg.GeminiModel)
+	if cfg.GeminiModel != "gemini-2.5-flash-preview-05-20" {
+		t.Errorf("Expected GeminiModel to be 'gemini-2.5-flash-preview-05-20', got '%s'", cfg.GeminiModel)
 	}
 
 	if cfg.SlackChannel != "#article-summarizer" {
@@ -41,13 +41,6 @@ func TestLoadConfig(t *testing.T) {
 		t.Errorf("Expected WebhookSlackChannel to be '#ondemand-article-summary', got '%s'", cfg.WebhookSlackChannel)
 	}
 
-	if cfg.CacheType != "memory" {
-		t.Errorf("Expected CacheType to be 'memory', got '%s'", cfg.CacheType)
-	}
-
-	if cfg.CacheDuration != 24 {
-		t.Errorf("Expected CacheDuration to be 24, got %d", cfg.CacheDuration)
-	}
 
 	// Check RSS feeds configuration
 	if cfg.HatenaRSSURL == "" {
@@ -113,21 +106,6 @@ func TestConfigValidation(t *testing.T) {
 			},
 			expectError: true,
 			errorField:  "SLACK_BOT_TOKEN",
-		},
-		{
-			name: "invalid cache duration",
-			setupEnv: func() {
-				os.Setenv("GEMINI_API_KEY", "test-key")
-				os.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
-				os.Setenv("CACHE_DURATION_HOURS", "-1")
-			},
-			cleanupEnv: func() {
-				os.Unsetenv("GEMINI_API_KEY")
-				os.Unsetenv("SLACK_BOT_TOKEN")
-				os.Unsetenv("CACHE_DURATION_HOURS")
-			},
-			expectError: true,
-			errorField:  "CACHE_DURATION_HOURS",
 		},
 		{
 			name: "valid configuration",

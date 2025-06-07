@@ -2,15 +2,19 @@ resources:
 - name: job
   type: gcp-types/cloudscheduler-v1:projects.locations.jobs
   properties:
-    parent: projects/{{ env["project"] }}/locations/us-central1
+    parent: projects/{{ env["project"] }}/locations/asia-northeast1
     name: {{ properties["name"] }}
     schedule: {{ properties["schedule"] }}
     timeZone: {{ properties.get("timezone", "UTC") }}
-    pubsubTarget:
-      topicName: projects/{{ env["project"] }}/topics/{{ properties["topicName"] }}
-      data: {{ (properties.get("payload", {}) | jsonify | b64encode) }}
+    httpTarget:
+      uri: {{ properties["targetFunction"] }}
+      httpMethod: POST
+      headers:
+        Content-Type: application/json
+        Authorization: Bearer {{ properties["authToken"] }}
+      body: {{ (properties.get("payload", {}) | jsonify | b64encode) }}
     retryConfig:
-      retryCount: {{ properties.get("retryCount", 3) }}
+      retryCount: {{ properties.get("retryCount", 1) }}
       maxRetryDuration: 300s
       minBackoffDuration: 5s
       maxBackoffDuration: 3600s

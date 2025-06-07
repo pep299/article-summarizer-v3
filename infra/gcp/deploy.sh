@@ -3,13 +3,20 @@
 set -e
 
 PROJECT_ID=${1:-"gen-lang-client-0715048106"}
-REGION=${2:-"us-central1"}
-DEPLOYMENT_NAME="article-summarizer-v3"
+REGION=${2:-"asia-northeast1"}
+DEPLOYMENT_NAME="main"
 
 echo "🚀 Deploying with Deployment Manager"
 echo "Project: $PROJECT_ID"
 echo "Region: $REGION"
 echo ""
+
+# Check required environment variables
+if [[ -z "$GEMINI_API_KEY" || -z "$SLACK_BOT_TOKEN" || -z "$WEBHOOK_AUTH_TOKEN" ]]; then
+    echo "❌ Required environment variables missing:"
+    echo "   GEMINI_API_KEY, SLACK_BOT_TOKEN, WEBHOOK_AUTH_TOKEN"
+    exit 1
+fi
 
 # Set the project
 gcloud config set project $PROJECT_ID
@@ -30,6 +37,7 @@ gsutil cp function-source.zip gs://$BUCKET_NAME/$DEPLOYMENT_NAME.zip
 echo "🚀 Deploying infrastructure..."
 gcloud deployment-manager deployments create $DEPLOYMENT_NAME \
     --config deployment.yaml \
+    --properties geminiApiKey="$GEMINI_API_KEY",slackBotToken="$SLACK_BOT_TOKEN",webhookAuthToken="$WEBHOOK_AUTH_TOKEN" \
     --project $PROJECT_ID
 
 echo ""

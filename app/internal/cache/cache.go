@@ -386,33 +386,8 @@ func (c *MemoryCache) Close() error {
 	return nil
 }
 
-// Manager handles cache operations with convenience methods
-type Manager struct {
-	cache Cache
-}
-
-// NewManager creates a new cache manager
-func NewManager(cacheType string, duration time.Duration) (*Manager, error) {
-	var cache Cache
-
-	switch cacheType {
-	case "memory":
-		cache = NewMemoryCache(duration)
-	case "cloud-storage":
-		var err error
-		cache, err = NewCloudStorageCache(duration)
-		if err != nil {
-			return nil, fmt.Errorf("creating cloud storage cache: %w", err)
-		}
-	default:
-		return nil, fmt.Errorf("unsupported cache type: %s", cacheType)
-	}
-
-	return &Manager{cache: cache}, nil
-}
-
-// MarkAsProcessed marks an RSS item as processed
-func (m *Manager) MarkAsProcessed(ctx context.Context, item rss.Item) error {
+// MarkAsProcessed marks an RSS item as processed (convenience function for CloudStorageCache)
+func MarkAsProcessed(ctx context.Context, cache Cache, item rss.Item) error {
 	key := GenerateKey(item)
 	entry := &CacheEntry{
 		Title:         item.Title,
@@ -422,18 +397,13 @@ func (m *Manager) MarkAsProcessed(ctx context.Context, item rss.Item) error {
 		ProcessedDate: time.Now(),
 	}
 
-	return m.cache.Set(ctx, key, entry)
+	return cache.Set(ctx, key, entry)
 }
 
-// IsCached checks if an RSS item is already cached
-func (m *Manager) IsCached(ctx context.Context, item rss.Item) (bool, error) {
+// IsCached checks if an RSS item is already cached (convenience function for CloudStorageCache)
+func IsCached(ctx context.Context, cache Cache, item rss.Item) (bool, error) {
 	key := GenerateKey(item)
-	return m.cache.Exists(ctx, key)
-}
-
-// Close closes the cache and stops background goroutines
-func (m *Manager) Close() error {
-	return m.cache.Close()
+	return cache.Exists(ctx, key)
 }
 
 // normalizeURL normalizes URL by removing query parameters

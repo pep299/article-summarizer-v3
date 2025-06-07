@@ -29,7 +29,6 @@ type Config struct {
 	// RSS settings
 	HatenaRSSURL   string `json:"hatena_rss_url"`
 	LobstersRSSURL string `json:"lobsters_rss_url"`
-
 }
 
 // RSSFeedConfig represents configuration for a single RSS feed

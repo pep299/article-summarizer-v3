@@ -254,8 +254,6 @@ func TestIntegration_ErrorPropagation(t *testing.T) {
 // Benchmark tests for integration scenarios
 func BenchmarkIntegration_ServerCreation(b *testing.B) {
 	cfg := &config.Config{
-		CacheType:     "memory",
-		CacheDuration: 1,
 		GeminiAPIKey:  "test-key",
 		GeminiModel:   "test-model",
 		SlackBotToken: "xoxb-test-token",

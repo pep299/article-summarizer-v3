@@ -16,23 +16,17 @@ resources:
   type: cloud-function.yaml
   properties:
     name: article-summarizer-v3
-    location: us-central1
+    location: asia-northeast1
     runtime: go121
-    entryPoint: ProcessRSSScheduled
+    entryPoint: SummarizeArticles
     topicName: article-summarizer-trigger
     memory: 512
     timeout: 540s
     environmentVariables:
       CACHE_BUCKET: $(ref.article-summarizer-cache.name)
-      GEMINI_API_KEY: "YOUR_GEMINI_API_KEY"
-      SLACK_BOT_TOKEN: "YOUR_SLACK_BOT_TOKEN"
-      WEBHOOK_AUTH_TOKEN: "YOUR_WEBHOOK_AUTH_TOKEN"
-
-# Pub/Sub topic for function triggers
-- name: article-summarizer-topic
-  type: gcp-types/pubsub-v1:projects.topics
-  properties:
-    topic: article-summarizer-trigger
+      GEMINI_API_KEY: {{ properties["geminiApiKey"] }}
+      SLACK_BOT_TOKEN: {{ properties["slackBotToken"] }}
+      WEBHOOK_AUTH_TOKEN: {{ properties["webhookAuthToken"] }}
 
 # Scheduler jobs
 - name: rss-scheduler-hatena
@@ -40,7 +34,9 @@ resources:
   properties:
     name: rss-scheduler-hatena
     schedule: "0 */3 * * *"  # Every 3 hours
-    topicName: $(ref.article-summarizer-topic.name)
+    targetFunction: $(ref.article-summarizer-function.httpsUrl)
+    feedName: hatena
+    authToken: {{ properties["webhookAuthToken"] }}
     payload:
       feedName: hatena
       
@@ -49,6 +45,8 @@ resources:
   properties:
     name: rss-scheduler-lobsters
     schedule: "30 */4 * * *"  # Every 4 hours, offset by 30 minutes
-    topicName: $(ref.article-summarizer-topic.name)
+    targetFunction: $(ref.article-summarizer-function.httpsUrl)
+    feedName: lobsters
+    authToken: {{ properties["webhookAuthToken"] }}
     payload:
       feedName: lobsters

@@ -188,11 +188,8 @@ func TestMemoryCacheStats(t *testing.T) {
 }
 
 func TestCacheManager(t *testing.T) {
-	manager, err := NewManager("memory", 1*time.Hour)
-	if err != nil {
-		t.Fatalf("Failed to create cache manager: %v", err)
-	}
-	defer manager.Close()
+	cache := NewMemoryCache(1 * time.Hour)
+	defer cache.Close()
 
 	ctx := context.Background()
 
@@ -205,13 +202,13 @@ func TestCacheManager(t *testing.T) {
 	}
 
 	// Test MarkAsProcessed
-	err = manager.MarkAsProcessed(ctx, item)
+	err := MarkAsProcessed(ctx, cache, item)
 	if err != nil {
 		t.Fatalf("Failed to mark as processed: %v", err)
 	}
 
 	// Test IsCached
-	cached, err := manager.IsCached(ctx, item)
+	cached, err := IsCached(ctx, cache, item)
 	if err != nil {
 		t.Fatalf("Failed to check if cached: %v", err)
 	}
@@ -274,7 +271,7 @@ func TestCloudStorageCache(t *testing.T) {
 	os.Setenv("CACHE_BUCKET", testBucket)
 	defer os.Unsetenv("CACHE_BUCKET")
 
-	cache, err := NewCloudStorageCache(1 * time.Hour)
+	cache, err := NewCloudStorageCache()
 	if err != nil {
 		t.Skipf("Skipping Cloud Storage test: %v", err)
 	}
@@ -329,11 +326,11 @@ func TestCloudStorageCacheManager(t *testing.T) {
 	os.Setenv("CACHE_BUCKET", testBucket)
 	defer os.Unsetenv("CACHE_BUCKET")
 
-	manager, err := NewManager("cloud-storage", 1*time.Hour)
+	cache, err := NewCloudStorageCache()
 	if err != nil {
 		t.Skipf("Skipping Cloud Storage manager test: %v", err)
 	}
-	defer manager.Close()
+	defer cache.Close()
 
 	ctx := context.Background()
 
@@ -346,14 +343,12 @@ func TestCloudStorageCacheManager(t *testing.T) {
 	}
 
 	// Setup clean test state with empty cache
-	if cache, ok := manager.cache.(*CloudStorageCache); ok {
-		cache.memoryIndex = make(map[string]*CacheEntry)
-		cache.indexFile = "tmp-index-test-manager.json"
-		defer teardownCache(t, cache, "tmp-index-test-manager.json")
-	}
+	cache.memoryIndex = make(map[string]*CacheEntry)
+	cache.indexFile = "tmp-index-test-manager.json"
+	defer teardownCache(t, cache, "tmp-index-test-manager.json")
 
 	// Test IsCached (未処理の場合)
-	cached, err := manager.IsCached(ctx, item)
+	cached, err := IsCached(ctx, cache, item)
 	if err != nil {
 		t.Fatalf("Failed to check if cached: %v", err)
 	}
@@ -362,13 +357,13 @@ func TestCloudStorageCacheManager(t *testing.T) {
 	}
 
 	// Test MarkAsProcessed (処理済みマーク)
-	err = manager.MarkAsProcessed(ctx, item)
+	err = MarkAsProcessed(ctx, cache, item)
 	if err != nil {
 		t.Fatalf("Failed to mark as processed: %v", err)
 	}
 
 	// Test IsCached (処理済みの場合)
-	cached, err = manager.IsCached(ctx, item)
+	cached, err = IsCached(ctx, cache, item)
 	if err != nil {
 		t.Fatalf("Failed to check if cached after processing: %v", err)
 	}
@@ -378,11 +373,9 @@ func TestCloudStorageCacheManager(t *testing.T) {
 
 	// Cleanup
 	key := GenerateKey(item)
-	if csCache, ok := manager.cache.(*CloudStorageCache); ok {
-		err = csCache.Delete(ctx, key)
-		if err != nil {
-			t.Logf("Cleanup warning: Failed to delete test entry: %v", err)
-		}
+	err = cache.Delete(ctx, key)
+	if err != nil {
+		t.Logf("Cleanup warning: Failed to delete test entry: %v", err)
 	}
 }
 
