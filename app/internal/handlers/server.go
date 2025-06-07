@@ -26,7 +26,6 @@ type SlackClient interface {
 	SendArticleSummary(ctx context.Context, summary slack.ArticleSummary) error
 }
 
-
 // Server holds the dependencies for RSS processing
 type Server struct {
 	config             *config.Config
@@ -55,7 +54,7 @@ func NewServer(cfg *config.Config) (*Server, error) {
 	}, nil
 }
 
-// NewServerWithDeps creates a new server instance with provided dependencies (for testing)  
+// NewServerWithDeps creates a new server instance with provided dependencies (for testing)
 func NewServerWithDeps(cfg *config.Config, rssClient RSSClient, geminiClient GeminiClient, slackClient SlackClient, webhookSlackClient SlackClient, cacheManager *cache.CloudStorageCache) *Server {
 	return &Server{
 		config:             cfg,

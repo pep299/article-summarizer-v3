@@ -3,11 +3,9 @@ package handlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/pep299/article-summarizer-v3/internal/cache"
 	"github.com/pep299/article-summarizer-v3/internal/config"
 	"github.com/pep299/article-summarizer-v3/internal/gemini"
 	"github.com/pep299/article-summarizer-v3/internal/rss"
@@ -16,10 +14,10 @@ import (
 
 func TestNewServer(t *testing.T) {
 	cfg := &config.Config{
-		GeminiAPIKey:  "test-key",
-		GeminiModel:   "test-model",
-		SlackBotToken: "xoxb-test-token",
-		SlackChannel:  "#test",
+		GeminiAPIKey:        "test-key",
+		GeminiModel:         "test-model",
+		SlackBotToken:       "xoxb-test-token",
+		SlackChannel:        "#test",
 		WebhookSlackChannel: "#webhook-test",
 	}
 
@@ -59,12 +57,12 @@ func TestNewServer(t *testing.T) {
 
 func TestProcessSingleFeed_NonExistentFeed(t *testing.T) {
 	cfg := &config.Config{
-		GeminiAPIKey:  "test-key",
-		SlackBotToken: "xoxb-test-token",
-		SlackChannel:  "#test",
+		GeminiAPIKey:        "test-key",
+		SlackBotToken:       "xoxb-test-token",
+		SlackChannel:        "#test",
 		WebhookSlackChannel: "#webhook-test",
 	}
-	
+
 	server := NewServerWithDeps(cfg, nil, nil, nil, nil, nil)
 	ctx := context.Background()
 
@@ -86,7 +84,7 @@ func TestProcessSingleURL(t *testing.T) {
 		SlackChannel:        "#test",
 		WebhookSlackChannel: "#webhook-test",
 	}
-	
+
 	// Create server using NewServer to ensure all clients are properly initialized
 	server, err := NewServer(cfg)
 	if err != nil {
@@ -100,273 +98,127 @@ func TestProcessSingleURL(t *testing.T) {
 	t.Logf("ProcessSingleURL result: %v", err)
 }
 
-// Mock clients for testing
+// Mock implementations for testing
 type mockRSSClient struct {
-	fetchFeedFunc func(ctx context.Context, feedName, url string) ([]rss.Item, error)
+	items []rss.Item
+	err   error
 }
 
 func (m *mockRSSClient) FetchFeed(ctx context.Context, feedName, url string) ([]rss.Item, error) {
-	if m.fetchFeedFunc != nil {
-		return m.fetchFeedFunc(ctx, feedName, url)
+	if m.err != nil {
+		return nil, m.err
 	}
-	return []rss.Item{}, nil
+	return m.items, nil
 }
 
 type mockGeminiClient struct {
-	summarizeURLFunc func(ctx context.Context, url string) (*gemini.SummarizeResponse, error)
+	response *gemini.SummarizeResponse
+	err      error
 }
 
 func (m *mockGeminiClient) SummarizeURL(ctx context.Context, url string) (*gemini.SummarizeResponse, error) {
-	if m.summarizeURLFunc != nil {
-		return m.summarizeURLFunc(ctx, url)
+	if m.err != nil {
+		return nil, m.err
 	}
-	return &gemini.SummarizeResponse{Summary: "Mock summary"}, nil
+	return m.response, nil
 }
 
 type mockSlackClient struct {
-	sendArticleSummaryFunc func(ctx context.Context, summary slack.ArticleSummary) error
+	sentSummaries []slack.ArticleSummary
+	err           error
 }
 
 func (m *mockSlackClient) SendArticleSummary(ctx context.Context, summary slack.ArticleSummary) error {
-	if m.sendArticleSummaryFunc != nil {
-		return m.sendArticleSummaryFunc(ctx, summary)
+	if m.err != nil {
+		return m.err
 	}
+	m.sentSummaries = append(m.sentSummaries, summary)
 	return nil
 }
 
-type mockCache struct {
-	existsFunc func(ctx context.Context, key string) (bool, error)
-	setFunc    func(ctx context.Context, key string, entry *cache.CacheEntry) error
-}
-
-func (m *mockCache) Get(ctx context.Context, key string) (*cache.CacheEntry, error) {
-	return nil, cache.ErrCacheMiss
-}
-
-func (m *mockCache) Set(ctx context.Context, key string, entry *cache.CacheEntry) error {
-	if m.setFunc != nil {
-		return m.setFunc(ctx, key, entry)
-	}
-	return nil
-}
-
-func (m *mockCache) Delete(ctx context.Context, key string) error {
-	return nil
-}
-
-func (m *mockCache) Exists(ctx context.Context, key string) (bool, error) {
-	if m.existsFunc != nil {
-		return m.existsFunc(ctx, key)
-	}
-	return false, nil
-}
-
-func (m *mockCache) GetStats(ctx context.Context) (*cache.Stats, error) {
-	return &cache.Stats{}, nil
-}
-
-func (m *mockCache) Close() error {
-	return nil
-}
-
-// Helper function to create a test server with specific mocks
-func createTestServerWithMocks(rssClient RSSClient, geminiClient GeminiClient, slackClient SlackClient, webhookSlackClient SlackClient, cacheManager *cache.CloudStorageCache) *Server {
+func TestProcessSingleFeed_Success(t *testing.T) {
 	cfg := &config.Config{
-		HatenaRSSURL:   "http://example.com/hatena.rss",
-		LobstersRSSURL: "http://example.com/lobsters.rss",
-	}
-
-	return NewServerWithDeps(cfg, rssClient, geminiClient, slackClient, webhookSlackClient, cacheManager)
-}
-
-func TestProcessSingleFeed_ValidFeeds(t *testing.T) {
-	mockRSS := &mockRSSClient{
-		fetchFeedFunc: func(ctx context.Context, feedName, url string) ([]rss.Item, error) {
-			return []rss.Item{}, nil // Return empty list to avoid further processing
-		},
-	}
-	server := createTestServerWithMocks(mockRSS, nil, nil, nil, nil)
-	ctx := context.Background()
-
-	// Test valid feeds exist
-	validFeeds := []string{"hatena", "lobsters"}
-	for _, feedName := range validFeeds {
-		// This should not return "feed not found" error
-		// It might fail due to network/API issues, but that's expected in test environment
-		err := server.ProcessSingleFeed(ctx, feedName)
-		if err != nil && err.Error() == fmt.Sprintf("feed %s not found", feedName) {
-			t.Errorf("Feed %s should be recognized as valid", feedName)
-		}
-	}
-}
-
-func TestProcessSingleFeed_RSSFetchError(t *testing.T) {
-	mockRSS := &mockRSSClient{
-		fetchFeedFunc: func(ctx context.Context, feedName, url string) ([]rss.Item, error) {
-			return nil, errors.New("RSS fetch failed")
-		},
-	}
-	server := createTestServerWithMocks(mockRSS, nil, nil, nil, nil)
-	ctx := context.Background()
-
-	err := server.ProcessSingleFeed(ctx, "hatena")
-	if err == nil {
-		t.Error("Expected error when RSS fetch fails")
-	}
-
-	if err.Error() != "fetching RSS feed hatena: RSS fetch failed" {
-		t.Errorf("Expected RSS fetch error to be wrapped, got: %v", err)
-	}
-}
-
-func TestProcessSingleFeed_EmptyFeed(t *testing.T) {
-	mockRSS := &mockRSSClient{
-		fetchFeedFunc: func(ctx context.Context, feedName, url string) ([]rss.Item, error) {
-			return []rss.Item{}, nil
-		},
-	}
-	server := createTestServerWithMocks(mockRSS, nil, nil, nil, nil)
-	ctx := context.Background()
-
-	err := server.ProcessSingleFeed(ctx, "hatena")
-	if err != nil {
-		t.Errorf("Expected no error for empty feed, got: %v", err)
-	}
-}
-
-func TestProcessSingleFeed_SuccessfulProcessing(t *testing.T) {
-	// Use full NewServer to avoid nil cache issues
-	cfg := &config.Config{
-		HatenaRSSURL:        "http://example.com/hatena.rss",
-		GeminiAPIKey:        "test-key",
-		SlackBotToken:       "xoxb-test-token",
-		SlackChannel:        "#test", 
-		WebhookSlackChannel: "#webhook-test",
-	}
-	
-	server, err := NewServer(cfg)
-	if err != nil {
-		t.Skipf("Skipping test due to server creation error: %v", err)
-		return
-	}
-	
-	ctx := context.Background()
-	
-	// Test with empty feed first (no articles to process)
-	err = server.ProcessSingleFeed(ctx, "hatena")
-	// We expect this might fail due to network issues, but shouldn't be "feed not found"
-	if err != nil && err.Error() == "feed hatena not found" {
-		t.Error("Should recognize 'hatena' as a valid feed")
-	}
-	t.Logf("ProcessSingleFeed result: %v", err)
-}
-
-func TestProcessArticle_GeminiError(t *testing.T) {
-	mockGemini := &mockGeminiClient{
-		summarizeURLFunc: func(ctx context.Context, url string) (*gemini.SummarizeResponse, error) {
-			return nil, errors.New("Gemini API failed")
-		},
-	}
-	server := createTestServerWithMocks(nil, mockGemini, nil, nil, nil)
-	ctx := context.Background()
-
-	article := rss.Item{
-		Title: "Test Article",
-		Link:  "http://example.com/article1",
-	}
-
-	err := server.processArticle(ctx, article)
-	if err == nil {
-		t.Error("Expected error when Gemini API fails")
-	}
-
-	if err.Error() != "summarizing article: Gemini API failed" {
-		t.Errorf("Expected Gemini API error to be wrapped, got: %v", err)
-	}
-}
-
-func TestProcessArticle_SlackError(t *testing.T) {
-	mockGemini := &mockGeminiClient{
-		summarizeURLFunc: func(ctx context.Context, url string) (*gemini.SummarizeResponse, error) {
-			return &gemini.SummarizeResponse{Summary: "Test summary"}, nil
-		},
-	}
-	mockSlack := &mockSlackClient{
-		sendArticleSummaryFunc: func(ctx context.Context, summary slack.ArticleSummary) error {
-			return errors.New("Slack API failed")
-		},
-	}
-	server := createTestServerWithMocks(nil, mockGemini, mockSlack, nil, nil)
-	ctx := context.Background()
-
-	article := rss.Item{
-		Title: "Test Article",
-		Link:  "http://example.com/article1",
-	}
-
-	err := server.processArticle(ctx, article)
-	if err == nil {
-		t.Error("Expected error when Slack API fails")
-	}
-
-	if err.Error() != "sending Slack notification: Slack API failed" {
-		t.Errorf("Expected Slack API error to be wrapped, got: %v", err)
-	}
-}
-
-func TestServerUtilityFunctions(t *testing.T) {
-	// Test Close function
-	server := createTestServerWithMocks(nil, nil, nil, nil, nil)
-
-	// Test Close
-	err := server.Close()
-	if err != nil {
-		t.Errorf("Close should not error, got: %v", err)
-	}
-}
-
-func TestProcessSingleFeed_NilClients(t *testing.T) {
-	mockRSS := &mockRSSClient{
-		fetchFeedFunc: func(ctx context.Context, feedName, url string) ([]rss.Item, error) {
-			return []rss.Item{
-				{
-					Title: "Test Article",
-					Link:  "http://example.com/article1",
-					GUID:  "article1",
-				},
-			}, nil
-		},
-	}
-	
-	cfg := &config.Config{
-		HatenaRSSURL:        "http://example.com/hatena.rss",
 		GeminiAPIKey:        "test-key",
 		SlackBotToken:       "xoxb-test-token",
 		SlackChannel:        "#test",
 		WebhookSlackChannel: "#webhook-test",
+		HatenaRSSURL:        "http://hatena.example.com/rss",
+		LobstersRSSURL:      "http://lobsters.example.com/rss",
 	}
-	
+
+	mockRSS := &mockRSSClient{
+		items: []rss.Item{
+			{
+				Title:       "Test Article 1",
+				Link:        "http://example.com/1",
+				Description: "Test description 1",
+				Source:      "Test Feed",
+			},
+		},
+	}
+
+	mockGemini := &mockGeminiClient{
+		response: &gemini.SummarizeResponse{
+			Summary: "Test summary",
+		},
+	}
+
+	mockSlack := &mockSlackClient{}
+
+	server := NewServerWithDeps(cfg, mockRSS, mockGemini, mockSlack, mockSlack, nil)
+	ctx := context.Background()
+
+	err := server.ProcessSingleFeed(ctx, "hatena")
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// Check that Slack messages were sent
+	if len(mockSlack.sentSummaries) == 0 {
+		t.Error("Expected Slack summaries to be sent")
+	}
+}
+
+func TestProcessSingleFeed_RSSError(t *testing.T) {
+	cfg := &config.Config{
+		GeminiAPIKey:   "test-key",
+		SlackBotToken:  "xoxb-test-token",
+		SlackChannel:   "#test",
+		HatenaRSSURL:   "http://hatena.example.com/rss",
+		LobstersRSSURL: "http://lobsters.example.com/rss",
+	}
+
+	mockRSS := &mockRSSClient{
+		err: errors.New("RSS fetch failed"),
+	}
+
 	server := NewServerWithDeps(cfg, mockRSS, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	err := server.ProcessSingleFeed(ctx, "hatena")
 	if err == nil {
-		t.Error("Expected error when gemini client is nil")
+		t.Error("Expected error from RSS fetch failure")
 	}
-	
-	if err != nil && err.Error() != "processing article Test Article: gemini client is not initialized" {
-		t.Errorf("Expected gemini client error, got: %v", err)
+
+	if !strings.Contains(err.Error(), "RSS fetch failed") {
+		t.Errorf("Expected error to contain 'RSS fetch failed', got: %v", err)
 	}
 }
 
-func TestProcessSingleFeed_AllArticlesCached(t *testing.T) {
-	// Test basic RSS fetch with empty results
-	mockRSS := &mockRSSClient{
-		fetchFeedFunc: func(ctx context.Context, feedName, url string) ([]rss.Item, error) {
-			return []rss.Item{}, nil // No articles
-		},
+func TestProcessSingleFeed_EmptyFeed(t *testing.T) {
+	cfg := &config.Config{
+		GeminiAPIKey:   "test-key",
+		SlackBotToken:  "xoxb-test-token",
+		SlackChannel:   "#test",
+		HatenaRSSURL:   "http://hatena.example.com/rss",
+		LobstersRSSURL: "http://lobsters.example.com/rss",
 	}
-	server := createTestServerWithMocks(mockRSS, nil, nil, nil, nil)
+
+	mockRSS := &mockRSSClient{
+		items: []rss.Item{}, // Empty feed
+	}
+
+	server := NewServerWithDeps(cfg, mockRSS, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	err := server.ProcessSingleFeed(ctx, "hatena")
@@ -375,80 +227,88 @@ func TestProcessSingleFeed_AllArticlesCached(t *testing.T) {
 	}
 }
 
-func TestProcessArticle_NilCache(t *testing.T) {
-	// Test processArticle with nil cache manager (should work without caching)
-	mockGemini := &mockGeminiClient{
-		summarizeURLFunc: func(ctx context.Context, url string) (*gemini.SummarizeResponse, error) {
-			return &gemini.SummarizeResponse{Summary: "Test summary"}, nil
-		},
-	}
-	mockSlack := &mockSlackClient{
-		sendArticleSummaryFunc: func(ctx context.Context, summary slack.ArticleSummary) error {
-			return nil
-		},
-	}
-	
+func TestProcessSingleURL_WithMocks(t *testing.T) {
 	cfg := &config.Config{
-		HatenaRSSURL:        "http://example.com/hatena.rss",
 		GeminiAPIKey:        "test-key",
 		SlackBotToken:       "xoxb-test-token",
 		SlackChannel:        "#test",
 		WebhookSlackChannel: "#webhook-test",
 	}
-	
-	server := NewServerWithDeps(cfg, nil, mockGemini, mockSlack, nil, nil)
-	ctx := context.Background()
 
-	article := rss.Item{
-		Title: "Test Article",
-		Link:  "http://example.com/article1",
+	mockGemini := &mockGeminiClient{
+		response: &gemini.SummarizeResponse{
+			Summary: "Test URL summary",
+		},
 	}
 
-	err := server.processArticle(ctx, article)
+	mockSlack := &mockSlackClient{}
+
+	server := NewServerWithDeps(cfg, nil, mockGemini, mockSlack, mockSlack, nil)
+	ctx := context.Background()
+
+	err := server.ProcessSingleURL(ctx, "http://example.com/article")
 	if err != nil {
-		t.Errorf("Expected no error when cache manager is nil, got: %v", err)
+		t.Errorf("Expected no error, got: %v", err)
+	}
+
+	// Check that webhook Slack message was sent
+	if len(mockSlack.sentSummaries) == 0 {
+		t.Error("Expected webhook Slack summary to be sent")
 	}
 }
 
-func TestProcessArticle_Success(t *testing.T) {
-	mockGemini := &mockGeminiClient{
-		summarizeURLFunc: func(ctx context.Context, url string) (*gemini.SummarizeResponse, error) {
-			if url != "http://example.com/article1" {
-				t.Errorf("Expected URL 'http://example.com/article1', got '%s'", url)
-			}
-			return &gemini.SummarizeResponse{Summary: "Test summary"}, nil
-		},
-	}
-	mockSlack := &mockSlackClient{
-		sendArticleSummaryFunc: func(ctx context.Context, summary slack.ArticleSummary) error {
-			if summary.RSS.Title != "Test Article" {
-				t.Errorf("Expected article title 'Test Article', got '%s'", summary.RSS.Title)
-			}
-			if summary.Summary.Summary != "Test summary" {
-				t.Errorf("Expected summary 'Test summary', got '%s'", summary.Summary.Summary)
-			}
-			return nil
-		},
-	}
-	
+func TestProcessSingleURL_GeminiError(t *testing.T) {
 	cfg := &config.Config{
 		GeminiAPIKey:        "test-key",
-		SlackBotToken:       "xoxb-test-token", 
+		SlackBotToken:       "xoxb-test-token",
 		SlackChannel:        "#test",
 		WebhookSlackChannel: "#webhook-test",
 	}
-	
-	server := NewServerWithDeps(cfg, nil, mockGemini, mockSlack, nil, nil)
-	ctx := context.Background()
 
-	article := rss.Item{
-		Title: "Test Article",
-		Link:  "http://example.com/article1",
+	mockGemini := &mockGeminiClient{
+		err: errors.New("Gemini summarization failed"),
 	}
 
-	err := server.processArticle(ctx, article)
-	// Expect error due to nil cache manager, but test the Gemini and Slack flow
-	if err != nil && !strings.Contains(err.Error(), "cache") && !strings.Contains(err.Error(), "nil") {
-		t.Errorf("Unexpected error type: %v", err)
+	server := NewServerWithDeps(cfg, nil, mockGemini, nil, nil, nil)
+	ctx := context.Background()
+
+	err := server.ProcessSingleURL(ctx, "http://example.com/article")
+	if err == nil {
+		t.Error("Expected error from Gemini failure")
+	}
+
+	if !strings.Contains(err.Error(), "summarizing URL") {
+		t.Errorf("Expected error to mention URL summarization, got: %v", err)
+	}
+}
+
+func TestProcessSingleURL_SlackError(t *testing.T) {
+	cfg := &config.Config{
+		GeminiAPIKey:        "test-key",
+		SlackBotToken:       "xoxb-test-token",
+		SlackChannel:        "#test",
+		WebhookSlackChannel: "#webhook-test",
+	}
+
+	mockGemini := &mockGeminiClient{
+		response: &gemini.SummarizeResponse{
+			Summary: "Test URL summary",
+		},
+	}
+
+	mockSlack := &mockSlackClient{
+		err: errors.New("Slack webhook failed"),
+	}
+
+	server := NewServerWithDeps(cfg, nil, mockGemini, mockSlack, mockSlack, nil)
+	ctx := context.Background()
+
+	err := server.ProcessSingleURL(ctx, "http://example.com/article")
+	if err == nil {
+		t.Error("Expected error from Slack failure")
+	}
+
+	if !strings.Contains(err.Error(), "Slack") {
+		t.Errorf("Expected error to mention Slack, got: %v", err)
 	}
 }

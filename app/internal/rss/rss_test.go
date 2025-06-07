@@ -2,6 +2,7 @@ package rss
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -426,5 +427,260 @@ func TestFetchFeed_InvalidXML(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "unable to parse RSS format") {
 		t.Errorf("Expected parse error, got: %v", err)
+	}
+}
+
+func TestFetchFeed_EmptyResponse(t *testing.T) {
+	// Create mock server that returns empty response
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(""))
+	}))
+	defer mockServer.Close()
+
+	client := NewClient()
+	ctx := context.Background()
+
+	_, err := client.FetchFeed(ctx, "Empty Feed", mockServer.URL)
+	if err == nil {
+		t.Error("Expected error for empty response, but got none")
+	}
+}
+
+func TestFetchFeed_LargeResponse(t *testing.T) {
+	// Create mock server that returns large RSS feed
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		w.WriteHeader(http.StatusOK)
+
+		// Build large RSS feed
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+	<channel>
+		<title>Large Test Feed</title>
+		<description>Feed with many items</description>
+		<link>http://example.com</link>`))
+
+		// Add many items
+		for i := 0; i < 100; i++ {
+			item := fmt.Sprintf(`
+		<item>
+			<title>Test Article %d</title>
+			<link>http://example.com/article%d</link>
+			<description>Description of article %d</description>
+			<pubDate>Mon, 02 Jan 2006 15:04:05 +0000</pubDate>
+			<guid>http://example.com/article%d</guid>
+			<category>tech</category>
+		</item>`, i, i, i, i)
+			w.Write([]byte(item))
+		}
+
+		w.Write([]byte(`
+	</channel>
+</rss>`))
+	}))
+	defer mockServer.Close()
+
+	client := NewClient()
+	ctx := context.Background()
+
+	items, err := client.FetchFeed(ctx, "Large Feed", mockServer.URL)
+	if err != nil {
+		t.Fatalf("Expected successful feed fetch for large feed, got error: %v", err)
+	}
+
+	if len(items) != 100 {
+		t.Errorf("Expected 100 items, got %d", len(items))
+	}
+}
+
+func TestExtractTextFromHTML_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		expected string
+		contains []string
+		excludes []string
+	}{
+		{
+			name:     "Empty HTML",
+			html:     "",
+			expected: "",
+		},
+		{
+			name:     "Plain text",
+			html:     "Just plain text",
+			contains: []string{"Just plain text"},
+		},
+		{
+			name:     "HTML entities",
+			html:     "<p>Text with &amp; &lt; &gt; &quot; entities</p>",
+			contains: []string{"Text with", "entities"},
+		},
+		{
+			name:     "Nested tags",
+			html:     "<div><p><span><strong>Deeply nested</strong> text</span></p></div>",
+			contains: []string{"Deeply nested text"},
+			excludes: []string{"<div>", "<p>", "<span>", "<strong>"},
+		},
+		{
+			name:     "Mixed content",
+			html:     "<h1>Title</h1><script>alert('bad');</script><p>Good content</p><style>.bad{}</style>",
+			contains: []string{"Title", "Good content"},
+			excludes: []string{"alert", "bad", ".bad{}"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractTextFromHTML(tt.html)
+
+			if tt.expected != "" && result != tt.expected {
+				t.Errorf("Expected %q, got %q", tt.expected, result)
+			}
+
+			for _, contain := range tt.contains {
+				if !strings.Contains(result, contain) {
+					t.Errorf("Expected result to contain %q, got %q", contain, result)
+				}
+			}
+
+			for _, exclude := range tt.excludes {
+				if strings.Contains(result, exclude) {
+					t.Errorf("Expected result to not contain %q, got %q", exclude, result)
+				}
+			}
+		})
+	}
+}
+
+func TestParseRSSDate_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{"RFC1123 format", "Mon, 02 Jan 2006 15:04:05 GMT", true},
+		{"RFC1123Z format", "Mon, 02 Jan 2006 15:04:05 +0000", true},
+		{"ISO8601 format", "2006-01-02T15:04:05Z", true},
+		{"ISO8601 with timezone", "2006-01-02T15:04:05+07:00", true},
+		{"Single digit day", "Mon, 2 Jan 2006 15:04:05 GMT", true},
+		{"Malformed timezone", "Mon, 02 Jan 2006 15:04:05 BadTZ", false},
+		{"Incomplete date", "Mon, 02 Jan", false},
+		{"Wrong format", "January 2, 2006", false},
+		{"Numbers only", "20060102150405", false},
+		{"Whitespace only", "   ", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseRSSDate(tt.input)
+			if tt.expected && err != nil {
+				t.Errorf("Expected parsing to succeed for '%s', but got error: %v", tt.input, err)
+			}
+			if !tt.expected && err == nil {
+				t.Errorf("Expected parsing to fail for '%s', but it succeeded", tt.input)
+			}
+		})
+	}
+}
+
+func TestGetUniqueItems_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		items    []Item
+		expected int
+	}{
+		{
+			name:     "Empty slice",
+			items:    []Item{},
+			expected: 0,
+		},
+		{
+			name: "All unique items",
+			items: []Item{
+				{Title: "A", Link: "http://a.com", GUID: "a"},
+				{Title: "B", Link: "http://b.com", GUID: "b"},
+				{Title: "C", Link: "http://c.com", GUID: "c"},
+			},
+			expected: 3,
+		},
+		{
+			name: "All duplicate items by GUID",
+			items: []Item{
+				{Title: "Same", Link: "http://a.com", GUID: "same"},
+				{Title: "Same", Link: "http://b.com", GUID: "same"},
+				{Title: "Same", Link: "http://c.com", GUID: "same"},
+			},
+			expected: 1,
+		},
+		{
+			name: "Mix of GUID and Link duplicates",
+			items: []Item{
+				{Title: "A", Link: "http://same.com", GUID: "a"},
+				{Title: "B", Link: "http://same.com", GUID: ""},
+				{Title: "C", Link: "http://different.com", GUID: "a"},
+			},
+			expected: 2, // Link duplicate removed, GUID duplicate kept (first occurrence)
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetUniqueItems(tt.items)
+			if len(result) != tt.expected {
+				t.Errorf("Expected %d unique items, got %d", tt.expected, len(result))
+			}
+		})
+	}
+}
+
+func TestFilterItems_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		items    []Item
+		expected int
+	}{
+		{
+			name:     "Empty slice",
+			items:    []Item{},
+			expected: 0,
+		},
+		{
+			name: "No ask categories",
+			items: []Item{
+				{Title: "Tech Article", Category: []string{"tech", "programming"}},
+				{Title: "News Article", Category: []string{"news"}},
+			},
+			expected: 2,
+		},
+		{
+			name: "All ask categories",
+			items: []Item{
+				{Title: "Ask HN", Category: []string{"ask"}},
+				{Title: "Ask Question", Category: []string{"ASK", "question"}},
+			},
+			expected: 0,
+		},
+		{
+			name: "Mixed case ask",
+			items: []Item{
+				{Title: "Valid", Category: []string{"tech"}},
+				{Title: "Ask Item", Category: []string{"Ask"}},
+				{Title: "ASK Item", Category: []string{"ASK"}},
+				{Title: "ask item", Category: []string{"ask"}},
+			},
+			expected: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FilterItems(tt.items)
+			if len(result) != tt.expected {
+				t.Errorf("Expected %d filtered items, got %d", tt.expected, len(result))
+			}
+		})
 	}
 }

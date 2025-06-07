@@ -41,7 +41,6 @@ func TestLoadConfig(t *testing.T) {
 		t.Errorf("Expected WebhookSlackChannel to be '#ondemand-article-summary', got '%s'", cfg.WebhookSlackChannel)
 	}
 
-
 	// Check RSS feeds configuration
 	if cfg.HatenaRSSURL == "" {
 		t.Error("Expected HatenaRSSURL to be configured")
