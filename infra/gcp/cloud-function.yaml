@@ -1,43 +1,5 @@
-info:
-  title: Cloud Function Template
-  description: Template for deploying Go-based Cloud Functions
-
-required:
-- name
-- location
-- runtime
-- entryPoint
-
-properties:
-  name:
-    type: string
-    description: Name of the Cloud Function
-  location:
-    type: string
-    description: GCP region for deployment
-    default: us-central1
-  runtime:
-    type: string
-    description: Runtime for the function
-    default: go121
-  entryPoint:
-    type: string
-    description: Entry point function name
-  environmentVariables:
-    type: object
-    description: Environment variables for the function
-    default: {}
-  memory:
-    type: string
-    description: Memory allocation for the function
-    default: 256MB
-  timeout:
-    type: string
-    description: Function timeout
-    default: 540s
-
 resources:
-- name: {{ env["name"] }}-function
+- name: function
   type: gcp-types/cloudfunctions-v1:projects.locations.functions
   properties:
     location: projects/{{ env["project"] }}/locations/{{ properties["location"] }}
@@ -46,14 +8,14 @@ resources:
     entryPoint: {{ properties["entryPoint"] }}
     runtime: {{ properties["runtime"] }}
     httpsTrigger: {}
-    availableMemoryMb: {{ properties["memory"].replace("MB", "") }}
-    timeout: {{ properties["timeout"] }}
-    environmentVariables: {{ properties["environmentVariables"] }}
+    availableMemoryMb: {{ properties.get("memory", 512) }}
+    timeout: {{ properties.get("timeout", "540s") }}
+    environmentVariables: {{ properties.get("environmentVariables", {}) }}
     
-- name: {{ env["name"] }}-invoker
+- name: function-invoker
   type: gcp-types/cloudfunctions-v1:projects.locations.functions.setIamPolicy
   properties:
-    resource: $(ref.{{ env["name"] }}-function.name)
+    resource: $(ref.function.name)
     policy:
       bindings:
       - role: roles/cloudfunctions.invoker
@@ -62,6 +24,6 @@ resources:
         
 outputs:
 - name: httpsUrl
-  value: $(ref.{{ env["name"] }}-function.httpsTrigger.url)
+  value: $(ref.function.httpsTrigger.url)
 - name: name
-  value: $(ref.{{ env["name"] }}-function.name)
+  value: $(ref.function.name)
