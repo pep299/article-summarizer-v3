@@ -11,15 +11,19 @@ echo "Project: $PROJECT_ID"
 echo "Region: $REGION"
 echo ""
 
-# Check required environment variables
-if [[ -z "$GEMINI_API_KEY" || -z "$SLACK_BOT_TOKEN" || -z "$WEBHOOK_AUTH_TOKEN" ]]; then
-    echo "❌ Required environment variables missing:"
-    echo "   GEMINI_API_KEY, SLACK_BOT_TOKEN, WEBHOOK_AUTH_TOKEN"
-    exit 1
-fi
-
 # Set the project
 gcloud config set project $PROJECT_ID
+
+# Create or update secrets in Secret Manager
+echo "🔐 Setting up secrets in Secret Manager..."
+echo "$GEMINI_API_KEY" | gcloud secrets create gemini-api-key --data-file=- --replication-policy=automatic 2>/dev/null || \
+    echo "$GEMINI_API_KEY" | gcloud secrets versions add gemini-api-key --data-file=-
+
+echo "$SLACK_BOT_TOKEN" | gcloud secrets create slack-bot-token --data-file=- --replication-policy=automatic 2>/dev/null || \
+    echo "$SLACK_BOT_TOKEN" | gcloud secrets versions add slack-bot-token --data-file=-
+
+echo "$WEBHOOK_AUTH_TOKEN" | gcloud secrets create webhook-auth-token --data-file=- --replication-policy=automatic 2>/dev/null || \
+    echo "$WEBHOOK_AUTH_TOKEN" | gcloud secrets versions add webhook-auth-token --data-file=-
 
 # Create source code archive
 echo "📦 Creating source code archive..."
@@ -37,7 +41,6 @@ gsutil cp function-source.zip gs://$BUCKET_NAME/$DEPLOYMENT_NAME.zip
 echo "🚀 Deploying infrastructure..."
 gcloud deployment-manager deployments create $DEPLOYMENT_NAME \
     --config deployment.yaml \
-    --properties geminiApiKey="$GEMINI_API_KEY",slackBotToken="$SLACK_BOT_TOKEN",webhookAuthToken="$WEBHOOK_AUTH_TOKEN" \
     --project $PROJECT_ID
 
 echo ""

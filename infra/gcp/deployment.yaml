@@ -19,7 +19,7 @@ resources:
     serviceAccount:
       displayName: Article Summarizer Service Account
 
-# Secret Manager権限付与
+# Secret Manager権限付与（Cloud Function用）
 - name: secret-accessor-binding
   type: gcp-types/cloudresourcemanager-v1:virtual.projects.iamMemberBinding
   properties:
@@ -29,6 +29,14 @@ resources:
   metadata:
     dependsOn:
     - function-service-account
+
+# Secret Manager権限付与（Cloud Scheduler用）
+- name: scheduler-secret-accessor-binding
+  type: gcp-types/cloudresourcemanager-v1:virtual.projects.iamMemberBinding
+  properties:
+    resource: gen-lang-client-0715048106
+    role: roles/secretmanager.secretAccessor
+    member: serviceAccount:service-gen-lang-client-0715048106@gcp-sa-cloudscheduler.iam.gserviceaccount.com
 
 # Cloud Function
 - name: article-summarizer-function
@@ -45,6 +53,7 @@ resources:
     dependsOn:
     - article-summarizer-cache
     - secret-accessor-binding
+    - scheduler-secret-accessor-binding
 
 # Scheduler jobs
 - name: rss-scheduler-hatena
@@ -54,7 +63,6 @@ resources:
     schedule: "0 */3 * * *"  # Every 3 hours
     targetFunction: $(ref.article-summarizer-function.httpsUrl)
     feedName: hatena
-    authToken: {{ properties["webhookAuthToken"] }}
     payload:
       feedName: hatena
       
@@ -65,6 +73,5 @@ resources:
     schedule: "30 */4 * * *"  # Every 4 hours, offset by 30 minutes
     targetFunction: $(ref.article-summarizer-function.httpsUrl)
     feedName: lobsters
-    authToken: {{ properties["webhookAuthToken"] }}
     payload:
       feedName: lobsters
