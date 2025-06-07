@@ -44,7 +44,7 @@ type Server struct {
 // NewServer creates a new server instance
 func NewServer(cfg *config.Config) (*Server, error) {
 	// Initialize cache manager
-	cacheManager, err := cache.NewManager(cfg.CacheType, time.Duration(cfg.CacheDuration)*time.Hour)
+	cacheManager, err := cache.NewCloudStorageCache()
 	if err != nil {
 		return nil, fmt.Errorf("creating cache manager: %w", err)
 	}

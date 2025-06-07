@@ -7,7 +7,9 @@ resources:
     sourceArchiveUrl: gs://{{ env["project"] }}-function-source/{{ properties["name"] }}.zip
     entryPoint: {{ properties["entryPoint"] }}
     runtime: {{ properties["runtime"] }}
-    httpsTrigger: {}
+    eventTrigger:
+      eventType: providers/cloud.pubsub/eventTypes/topic.publish
+      resource: projects/{{ env["project"] }}/topics/{{ properties["topicName"] }}
     availableMemoryMb: {{ properties.get("memory", 512) }}
     timeout: {{ properties.get("timeout", "540s") }}
     environmentVariables: {{ properties.get("environmentVariables", {}) }}

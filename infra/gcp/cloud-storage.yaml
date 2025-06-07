@@ -7,12 +7,6 @@ resources:
     storageClass: {{ properties.get("storageClass", "STANDARD") }}
     versioning:
       enabled: {{ properties.get("versioning", false) }}
-    lifecycle:
-      rule:
-      - action:
-          type: Delete
-        condition:
-          age: 30  # Delete cache entries older than 30 days
           
 outputs:
 - name: name

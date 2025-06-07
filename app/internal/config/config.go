@@ -30,9 +30,6 @@ type Config struct {
 	HatenaRSSURL   string `json:"hatena_rss_url"`
 	LobstersRSSURL string `json:"lobsters_rss_url"`
 
-	// Cache settings
-	CacheType     string `json:"cache_type"`     // "memory"
-	CacheDuration int    `json:"cache_duration"` // in hours
 }
 
 // RSSFeedConfig represents configuration for a single RSS feed
@@ -49,18 +46,16 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	config := &Config{
-		Port:                getEnvOrDefault("PORT", "8080"),
-		Host:                getEnvOrDefault("HOST", "0.0.0.0"),
+		Port:                "8080",
+		Host:                "0.0.0.0",
 		GeminiAPIKey:        getEnvOrDefault("GEMINI_API_KEY", ""),
-		GeminiModel:         getEnvOrDefault("GEMINI_MODEL", "gemini-2.5-flash"),
+		GeminiModel:         "gemini-2.5-flash-preview-05-20",
 		SlackBotToken:       getEnvOrDefault("SLACK_BOT_TOKEN", ""),
-		SlackChannel:        getEnvOrDefault("SLACK_CHANNEL", "#article-summarizer"),
-		WebhookSlackChannel: getEnvOrDefault("WEBHOOK_SLACK_CHANNEL", "#ondemand-article-summary"),
+		SlackChannel:        "#article-summarizer",
+		WebhookSlackChannel: "#ondemand-article-summary",
 		WebhookAuthToken:    getEnvOrDefault("WEBHOOK_AUTH_TOKEN", ""),
-		HatenaRSSURL:        getEnvOrDefault("HATENA_RSS_URL", "https://b.hatena.ne.jp/hotentry/it.rss"),
-		LobstersRSSURL:      getEnvOrDefault("LOBSTERS_RSS_URL", "https://lobste.rs/rss"),
-		CacheType:           getEnvOrDefault("CACHE_TYPE", "memory"),
-		CacheDuration:       getEnvOrDefaultInt("CACHE_DURATION_HOURS", 24),
+		HatenaRSSURL:        "https://b.hatena.ne.jp/hotentry/it.rss",
+		LobstersRSSURL:      "https://lobste.rs/rss",
 	}
 
 	return config, config.validate()
@@ -76,9 +71,6 @@ func (c *Config) validate() error {
 	}
 	if !strings.HasPrefix(c.SlackBotToken, "xoxb-") {
 		return &ConfigError{Field: "SLACK_BOT_TOKEN", Message: "must start with xoxb-"}
-	}
-	if c.CacheDuration <= 0 {
-		return &ConfigError{Field: "CACHE_DURATION_HOURS", Message: "must be positive"}
 	}
 	return nil
 }

@@ -8,8 +8,8 @@ resources:
 - name: article-summarizer-cache
   type: cloud-storage.yaml
   properties:
-    name: gen-lang-client-0715048106-article-cache
-    location: us-central1
+    name: article-summarizer-processed-articles
+    location: asia-northeast1
 
 # Cloud Function
 - name: article-summarizer-function
@@ -18,13 +18,21 @@ resources:
     name: article-summarizer-v3
     location: us-central1
     runtime: go121
-    entryPoint: SummarizeArticles
+    entryPoint: ProcessRSSScheduled
+    topicName: article-summarizer-trigger
     memory: 512
     timeout: 540s
     environmentVariables:
-      CACHE_TYPE: cloud-storage
       CACHE_BUCKET: $(ref.article-summarizer-cache.name)
-      CACHE_DURATION: "24"
+      GEMINI_API_KEY: "YOUR_GEMINI_API_KEY"
+      SLACK_BOT_TOKEN: "YOUR_SLACK_BOT_TOKEN"
+      WEBHOOK_AUTH_TOKEN: "YOUR_WEBHOOK_AUTH_TOKEN"
+
+# Pub/Sub topic for function triggers
+- name: article-summarizer-topic
+  type: gcp-types/pubsub-v1:projects.topics
+  properties:
+    topic: article-summarizer-trigger
 
 # Scheduler jobs
 - name: rss-scheduler-hatena
@@ -32,7 +40,7 @@ resources:
   properties:
     name: rss-scheduler-hatena
     schedule: "0 */3 * * *"  # Every 3 hours
-    targetFunction: $(ref.article-summarizer-function.httpsUrl)/process?feed=hatena
+    topicName: $(ref.article-summarizer-topic.name)
     payload:
       feedName: hatena
       
@@ -41,6 +49,6 @@ resources:
   properties:
     name: rss-scheduler-lobsters
     schedule: "30 */4 * * *"  # Every 4 hours, offset by 30 minutes
-    targetFunction: $(ref.article-summarizer-function.httpsUrl)/process?feed=lobsters
+    topicName: $(ref.article-summarizer-topic.name)
     payload:
       feedName: lobsters

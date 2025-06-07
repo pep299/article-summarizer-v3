@@ -82,7 +82,7 @@ type CloudStorageCache struct {
 const indexFileName = "index.json"
 
 // NewCloudStorageCache creates a new Cloud Storage cache
-func NewCloudStorageCache(duration time.Duration) (*CloudStorageCache, error) {
+func NewCloudStorageCache() (*CloudStorageCache, error) {
 	ctx := context.Background()
 	client, err := storage.NewClient(ctx)
 	if err != nil {

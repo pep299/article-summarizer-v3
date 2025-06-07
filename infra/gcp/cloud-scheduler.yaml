@@ -6,12 +6,9 @@ resources:
     name: {{ properties["name"] }}
     schedule: {{ properties["schedule"] }}
     timeZone: {{ properties.get("timezone", "UTC") }}
-    httpTarget:
-      uri: {{ properties["targetFunction"] }}
-      httpMethod: POST
-      headers:
-        Content-Type: application/json
-      body: {{ (properties.get("payload", {}) | jsonify | b64encode) }}
+    pubsubTarget:
+      topicName: projects/{{ env["project"] }}/topics/{{ properties["topicName"] }}
+      data: {{ (properties.get("payload", {}) | jsonify | b64encode) }}
     retryConfig:
       retryCount: {{ properties.get("retryCount", 3) }}
       maxRetryDuration: 300s
