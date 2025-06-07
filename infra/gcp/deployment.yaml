@@ -11,6 +11,25 @@ resources:
     name: article-summarizer-processed-articles
     location: asia-northeast1
 
+# Service Account for Function
+- name: function-service-account
+  type: gcp-types/iam-v1:projects.serviceAccounts
+  properties:
+    accountId: article-summarizer-sa
+    serviceAccount:
+      displayName: Article Summarizer Service Account
+
+# Secret Manager権限付与
+- name: secret-accessor-binding
+  type: gcp-types/cloudresourcemanager-v1:virtual.projects.iamMemberBinding
+  properties:
+    resource: gen-lang-client-0715048106
+    role: roles/secretmanager.secretAccessor
+    member: serviceAccount:article-summarizer-sa@gen-lang-client-0715048106.iam.gserviceaccount.com
+  metadata:
+    dependsOn:
+    - function-service-account
+
 # Cloud Function
 - name: article-summarizer-function
   type: cloud-function.yaml
@@ -19,14 +38,13 @@ resources:
     location: asia-northeast1
     runtime: go121
     entryPoint: SummarizeArticles
-    topicName: article-summarizer-trigger
     memory: 512
     timeout: 540s
-    environmentVariables:
-      CACHE_BUCKET: $(ref.article-summarizer-cache.name)
-      GEMINI_API_KEY: {{ properties["geminiApiKey"] }}
-      SLACK_BOT_TOKEN: {{ properties["slackBotToken"] }}
-      WEBHOOK_AUTH_TOKEN: {{ properties["webhookAuthToken"] }}
+    serviceAccount: article-summarizer-sa@gen-lang-client-0715048106.iam.gserviceaccount.com
+  metadata:
+    dependsOn:
+    - article-summarizer-cache
+    - secret-accessor-binding
 
 # Scheduler jobs
 - name: rss-scheduler-hatena

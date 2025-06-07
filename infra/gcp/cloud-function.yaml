@@ -10,7 +10,20 @@ resources:
     httpsTrigger: {}
     availableMemoryMb: {{ properties.get("memory", 512) }}
     timeout: {{ properties.get("timeout", "540s") }}
-    environmentVariables: {{ properties.get("environmentVariables", {}) }}
+    secretEnvironmentVariables:
+    - key: GEMINI_API_KEY
+      projectId: {{ env["project"] }}
+      secret: gemini-api-key
+      version: latest
+    - key: SLACK_BOT_TOKEN
+      projectId: {{ env["project"] }}
+      secret: slack-bot-token
+      version: latest
+    - key: WEBHOOK_AUTH_TOKEN
+      projectId: {{ env["project"] }}
+      secret: webhook-auth-token
+      version: latest
+    serviceAccountEmail: {{ properties.get("serviceAccount", "default") }}
     
 - name: function-invoker
   type: gcp-types/cloudfunctions-v1:projects.locations.functions.setIamPolicy
