@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/pep299/article-summarizer-v3/internal/rss"
 )
 
@@ -278,6 +279,11 @@ func TestCloudStorageCache(t *testing.T) {
 		t.Skipf("Skipping Cloud Storage test: %v", err)
 	}
 	defer cache.Close()
+	defer teardownCache(t, cache, "tmp-index-test.json")
+
+	// Start with empty cache for test and use test-specific file
+	cache.memoryIndex = make(map[string]*CacheEntry)
+	cache.indexFile = "tmp-index-test.json"
 
 	ctx := context.Background()
 
@@ -291,7 +297,7 @@ func TestCloudStorageCache(t *testing.T) {
 	}
 
 	testKey := "coverage-test-key"
-	
+
 	// Test Set (MarkAsProcessedで使用)
 	err = cache.Set(ctx, testKey, entry)
 	if err != nil {
@@ -315,12 +321,6 @@ func TestCloudStorageCache(t *testing.T) {
 	if exists {
 		t.Error("Expected non-existent key to not exist")
 	}
-
-	// Cleanup - テスト後の削除
-	err = cache.Delete(ctx, testKey)
-	if err != nil {
-		t.Logf("Cleanup warning: Failed to delete test entry: %v", err)
-	}
 }
 
 func TestCloudStorageCacheManager(t *testing.T) {
@@ -343,6 +343,13 @@ func TestCloudStorageCacheManager(t *testing.T) {
 		GUID:       "coverage-test-guid",
 		Source:     "coverage-test-source",
 		ParsedDate: time.Now(),
+	}
+
+	// Setup clean test state with empty cache
+	if cache, ok := manager.cache.(*CloudStorageCache); ok {
+		cache.memoryIndex = make(map[string]*CacheEntry)
+		cache.indexFile = "tmp-index-test-manager.json"
+		defer teardownCache(t, cache, "tmp-index-test-manager.json")
 	}
 
 	// Test IsCached (未処理の場合)
@@ -376,5 +383,89 @@ func TestCloudStorageCacheManager(t *testing.T) {
 		if err != nil {
 			t.Logf("Cleanup warning: Failed to delete test entry: %v", err)
 		}
+	}
+}
+
+func TestCloudStorageCacheLoadExistingData(t *testing.T) {
+	// Test loading existing data from index-test.json (read-side test)
+	testBucket := "article-summarizer-processed-articles"
+	os.Setenv("CACHE_BUCKET", testBucket)
+	defer os.Unsetenv("CACHE_BUCKET")
+
+	// Create cache with empty state first
+	cache := &CloudStorageCache{
+		client:     nil, // Will be set properly
+		bucketName: testBucket,
+		indexFile:  "index-test.json",
+	}
+
+	// Initialize client
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx)
+	if err != nil {
+		t.Skipf("Skipping Cloud Storage read test: %v", err)
+	}
+	cache.client = client
+	defer cache.Close()
+
+	// Load existing data from index-test.json
+	err = cache.loadIndex(ctx)
+	if err != nil {
+		t.Skipf("index-test.json not found or failed to load: %v", err)
+	}
+
+	// Test: Verify known keys exist (from pre-populated index-test.json)
+	knownKeys := []string{
+		"test-article-1",
+		"test-article-2",
+		"http://tech.blog/article-123",
+	}
+
+	for _, key := range knownKeys {
+		exists, err := cache.Exists(ctx, key)
+		if err != nil {
+			t.Fatalf("Failed to check existence of key '%s': %v", key, err)
+		}
+		if !exists {
+			t.Errorf("Expected key '%s' to exist in index-test.json", key)
+		}
+	}
+
+	// Test: Verify unknown key doesn't exist
+	exists, err := cache.Exists(ctx, "unknown-key-12345")
+	if err != nil {
+		t.Fatalf("Failed to check non-existent key: %v", err)
+	}
+	if exists {
+		t.Error("Expected unknown key to not exist")
+	}
+
+	// Test: Verify Get() works with pre-loaded data
+	entry, err := cache.Get(ctx, "test-article-1")
+	if err != nil {
+		t.Fatalf("Failed to get known entry: %v", err)
+	}
+	if entry.Title != "Pre-existing Test Article 1" {
+		t.Errorf("Expected title 'Pre-existing Test Article 1', got '%s'", entry.Title)
+	}
+	if entry.Source != "test-source-1" {
+		t.Errorf("Expected source 'test-source-1', got '%s'", entry.Source)
+	}
+
+	// Test: Verify Get() returns cache miss for unknown key
+	_, err = cache.Get(ctx, "unknown-key-12345")
+	if err != ErrCacheMiss {
+		t.Errorf("Expected ErrCacheMiss for unknown key, got %v", err)
+	}
+}
+
+// teardownCache cleans up test files from Cloud Storage
+func teardownCache(t *testing.T, cache *CloudStorageCache, filename string) {
+	ctx := context.Background()
+	bucket := cache.client.Bucket(cache.bucketName)
+
+	// Delete test index file
+	if err := bucket.Object(filename).Delete(ctx); err != nil && err != storage.ErrObjectNotExist {
+		t.Logf("Cleanup warning: Failed to delete %s: %v", filename, err)
 	}
 }

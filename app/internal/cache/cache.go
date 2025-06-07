@@ -13,7 +13,6 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/pep299/article-summarizer-v3/internal/rss"
-	"google.golang.org/api/iterator"
 )
 
 // Cache interface defines cache operations
@@ -22,7 +21,6 @@ type Cache interface {
 	Set(ctx context.Context, key string, entry *CacheEntry) error
 	Delete(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
-	Clear(ctx context.Context) error
 	GetStats(ctx context.Context) (*Stats, error)
 	Close() error
 }
@@ -75,11 +73,13 @@ func NewMemoryCache(duration time.Duration) *MemoryCache {
 
 // CloudStorageCache implements cache using Google Cloud Storage with JSON format
 type CloudStorageCache struct {
-	client     *storage.Client
-	bucketName string
-	duration   time.Duration
-	prefix     string
+	client      *storage.Client
+	bucketName  string
+	memoryIndex map[string]*CacheEntry // in-memory index cache
+	indexFile   string                 // configurable for testing
 }
+
+const indexFileName = "index.json"
 
 // NewCloudStorageCache creates a new Cloud Storage cache
 func NewCloudStorageCache(duration time.Duration) (*CloudStorageCache, error) {
@@ -95,168 +95,147 @@ func NewCloudStorageCache(duration time.Duration) (*CloudStorageCache, error) {
 		bucketName = env
 	}
 
-	return &CloudStorageCache{
+	cache := &CloudStorageCache{
 		client:     client,
 		bucketName: bucketName,
-		duration:   duration,
-		prefix:     "cache/",
-	}, nil
+		indexFile:  indexFileName,
+	}
+
+	// Load index.json at startup
+	if err := cache.loadIndex(ctx); err != nil {
+		// If index doesn't exist or fails to load, start with empty cache
+		cache.memoryIndex = make(map[string]*CacheEntry)
+	}
+
+	return cache, nil
 }
 
-// Get retrieves an entry from Cloud Storage
+// Get retrieves an entry from memory index
 func (c *CloudStorageCache) Get(ctx context.Context, key string) (*CacheEntry, error) {
-	objectName := c.prefix + key + ".json"
-	obj := c.client.Bucket(c.bucketName).Object(objectName)
-
-	reader, err := obj.NewReader(ctx)
-	if err != nil {
-		if err == storage.ErrObjectNotExist {
-			return nil, ErrCacheMiss
-		}
-		return nil, fmt.Errorf("opening object reader: %w", err)
+	if entry, exists := c.memoryIndex[key]; exists {
+		return entry, nil
 	}
-	defer reader.Close()
-
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("reading object data: %w", err)
-	}
-
-	var entry CacheEntry
-	if err := json.Unmarshal(data, &entry); err != nil {
-		return nil, fmt.Errorf("unmarshaling cache entry: %w", err)
-	}
-
-	return &entry, nil
+	return nil, ErrCacheMiss
 }
 
-// Set stores an entry in Cloud Storage
+// Set stores an entry in memory index and saves to Cloud Storage
 func (c *CloudStorageCache) Set(ctx context.Context, key string, entry *CacheEntry) error {
-	objectName := c.prefix + key + ".json"
-	obj := c.client.Bucket(c.bucketName).Object(objectName)
-
+	// Update memory index
 	if entry.ProcessedDate.IsZero() {
 		entry.ProcessedDate = time.Now()
 	}
+	c.memoryIndex[key] = entry
 
-	data, err := json.Marshal(entry)
+	// Save index to Cloud Storage immediately
+	data, err := json.Marshal(c.memoryIndex)
 	if err != nil {
-		return fmt.Errorf("marshaling cache entry: %w", err)
+		return fmt.Errorf("marshaling index: %w", err)
 	}
 
+	obj := c.client.Bucket(c.bucketName).Object(c.indexFile)
 	writer := obj.NewWriter(ctx)
 	writer.ContentType = "application/json"
 
 	if _, err := writer.Write(data); err != nil {
 		writer.Close()
-		return fmt.Errorf("writing object data: %w", err)
+		return fmt.Errorf("writing index data: %w", err)
 	}
 
 	if err := writer.Close(); err != nil {
-		return fmt.Errorf("closing object writer: %w", err)
+		return fmt.Errorf("closing index writer: %w", err)
 	}
 
 	return nil
 }
 
-// Delete removes an entry from Cloud Storage
+// Delete removes an entry from memory index and updates Cloud Storage
 func (c *CloudStorageCache) Delete(ctx context.Context, key string) error {
-	objectName := c.prefix + key + ".json"
-	obj := c.client.Bucket(c.bucketName).Object(objectName)
+	// Remove from memory index
+	delete(c.memoryIndex, key)
 
-	if err := obj.Delete(ctx); err != nil && err != storage.ErrObjectNotExist {
-		return fmt.Errorf("deleting object: %w", err)
-	}
-
-	return nil
-}
-
-// Exists checks if an entry exists in Cloud Storage
-func (c *CloudStorageCache) Exists(ctx context.Context, key string) (bool, error) {
-	objectName := c.prefix + key + ".json"
-	obj := c.client.Bucket(c.bucketName).Object(objectName)
-
-	attrs, err := obj.Attrs(ctx)
+	// Save updated index to Cloud Storage
+	data, err := json.Marshal(c.memoryIndex)
 	if err != nil {
-		if err == storage.ErrObjectNotExist {
-			return false, nil
-		}
-		return false, fmt.Errorf("getting object attributes: %w", err)
+		return fmt.Errorf("marshaling index: %w", err)
 	}
 
-	// Check if we can infer expiration from metadata (not implemented for simplicity)
-	// For now, we assume the object exists and is valid
-	_ = attrs
-	return true, nil
-}
+	obj := c.client.Bucket(c.bucketName).Object(c.indexFile)
+	writer := obj.NewWriter(ctx)
+	writer.ContentType = "application/json"
 
-// Clear removes all entries from Cloud Storage with the cache prefix
-func (c *CloudStorageCache) Clear(ctx context.Context) error {
-	bucket := c.client.Bucket(c.bucketName)
+	if _, err := writer.Write(data); err != nil {
+		writer.Close()
+		return fmt.Errorf("writing index data: %w", err)
+	}
 
-	// List all objects with cache prefix
-	it := bucket.Objects(ctx, &storage.Query{Prefix: c.prefix})
-
-	for {
-		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("listing objects: %w", err)
-		}
-
-		// Delete object
-		if err := bucket.Object(attrs.Name).Delete(ctx); err != nil {
-			return fmt.Errorf("deleting object %s: %w", attrs.Name, err)
-		}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("closing index writer: %w", err)
 	}
 
 	return nil
+}
+
+// Exists checks if an entry exists in memory index (optimized)
+func (c *CloudStorageCache) Exists(ctx context.Context, key string) (bool, error) {
+	_, exists := c.memoryIndex[key]
+	return exists, nil
 }
 
 // GetStats returns cache statistics for Cloud Storage
 func (c *CloudStorageCache) GetStats(ctx context.Context) (*Stats, error) {
-	bucket := c.client.Bucket(c.bucketName)
-	it := bucket.Objects(ctx, &storage.Query{Prefix: c.prefix})
-
 	stats := &Stats{
-		HitCount:  0, // Not tracked in Cloud Storage implementation
-		MissCount: 0, // Not tracked in Cloud Storage implementation
-		HitRate:   0, // Not tracked in Cloud Storage implementation
+		TotalEntries: len(c.memoryIndex),
+		HitCount:     0, // Not tracked in Cloud Storage implementation
+		MissCount:    0, // Not tracked in Cloud Storage implementation
+		HitRate:      0, // Not tracked in Cloud Storage implementation
 	}
 
-	var totalSize int64
-	var oldestTime time.Time
+	// Calculate memory usage and ages from memory index
 	var totalAge time.Duration
 	now := time.Now()
 
-	for {
-		attrs, err := it.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("listing objects: %w", err)
+	for _, entry := range c.memoryIndex {
+		stats.MemoryUsage += estimateMemoryUsage(entry)
+
+		if stats.OldestEntry.IsZero() || entry.ProcessedDate.Before(stats.OldestEntry) {
+			stats.OldestEntry = entry.ProcessedDate
 		}
 
-		stats.TotalEntries++
-		totalSize += attrs.Size
-
-		if oldestTime.IsZero() || attrs.Created.Before(oldestTime) {
-			oldestTime = attrs.Created
-		}
-
-		totalAge += now.Sub(attrs.Created)
+		totalAge += now.Sub(entry.ProcessedDate)
 	}
 
-	stats.MemoryUsage = totalSize
-	stats.OldestEntry = oldestTime
 	if stats.TotalEntries > 0 {
 		stats.AverageAge = totalAge / time.Duration(stats.TotalEntries)
 	}
 
 	return stats, nil
+}
+
+// loadIndex loads the index.json from Cloud Storage into memory
+func (c *CloudStorageCache) loadIndex(ctx context.Context) error {
+	obj := c.client.Bucket(c.bucketName).Object(c.indexFile)
+
+	reader, err := obj.NewReader(ctx)
+	if err != nil {
+		if err == storage.ErrObjectNotExist {
+			// Index doesn't exist yet, start with empty index
+			c.memoryIndex = make(map[string]*CacheEntry)
+			return nil
+		}
+		return fmt.Errorf("opening index reader: %w", err)
+	}
+	defer reader.Close()
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("reading index data: %w", err)
+	}
+
+	if err := json.Unmarshal(data, &c.memoryIndex); err != nil {
+		return fmt.Errorf("unmarshaling index: %w", err)
+	}
+
+	return nil
 }
 
 // Close closes the Cloud Storage client
