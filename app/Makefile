@@ -115,4 +115,21 @@ help:
 	@echo "  generate    - Run go generate"
 	@echo "  security    - Run security checks (requires gosec)"
 	@echo "  check       - Run all checks (fmt, vet, lint, test-race, security)"
+	@echo "  check-env   - Check development environment setup"
 	@echo "  help        - Show this help message"
+
+# Environment check
+.PHONY: check-env
+check-env:
+	@echo "🔍 Checking development environment..."
+	@echo ""
+	@echo "1. Go version:"
+	@eval "$$(mise activate bash)" && go version || echo "❌ Go not found"
+	@echo ""
+	@echo "2. Google Cloud authentication:"
+	@gcloud auth list --format="value(account)" | head -1 | sed 's/^/✅ Authenticated as: /' || echo "❌ Not authenticated to Google Cloud"
+	@echo ""
+	@echo "3. GCS bucket access:"
+	@gsutil ls gs://article-summarizer-processed-articles/ >/dev/null 2>&1 && echo "✅ GCS bucket accessible" || echo "❌ Cannot access GCS bucket"
+	@echo ""
+	@echo "Environment check complete!"
