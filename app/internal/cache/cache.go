@@ -89,8 +89,8 @@ func NewCloudStorageCache() (*CloudStorageCache, error) {
 		return nil, fmt.Errorf("creating storage client: %w", err)
 	}
 
-	// Get bucket name from environment (default: article-summarizer-cache)
-	bucketName := "article-summarizer-cache"
+	// Get bucket name from environment (default: article-summarizer-processed-articles)
+	bucketName := "article-summarizer-processed-articles"
 	if env := os.Getenv("CACHE_BUCKET"); env != "" {
 		bucketName = env
 	}
