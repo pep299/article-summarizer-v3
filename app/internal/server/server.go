@@ -4,55 +4,30 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/pep299/article-summarizer-v3/internal/config"
-	"github.com/pep299/article-summarizer-v3/internal/di"
-	"github.com/pep299/article-summarizer-v3/internal/handler"
+	"github.com/pep299/article-summarizer-v3/internal/application"
 	"github.com/pep299/article-summarizer-v3/internal/middleware"
-	"github.com/pep299/article-summarizer-v3/internal/repository"
-	"github.com/pep299/article-summarizer-v3/internal/service"
 )
 
 // CreateHandler creates the main HTTP handler for the application
 func CreateHandler() (http.Handler, func(), error) {
-	// Load configuration
-	cfg, err := config.Load()
+	// Create application (handles all DI and business logic)
+	app, err := application.New()
 	if err != nil {
 		return nil, nil, err
 	}
-
-	// Create DI container
-	container, err := di.NewContainer(cfg)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Create repositories
-	rssRepo := repository.NewRSSRepository(container.RSSClient)
-	geminiRepo := repository.NewGeminiRepository(container.GeminiClient)
-	cacheRepo := repository.NewCacheRepository(container.CacheManager)
-	slackRepo := repository.NewSlackRepository(container.SlackClient)
-	webhookSlackRepo := repository.NewSlackRepository(container.WebhookSlackClient)
-
-	// Create services
-	feedService := service.NewFeed(rssRepo, cacheRepo, geminiRepo, slackRepo)
-	urlService := service.NewURL(geminiRepo, webhookSlackRepo)
-
-	// Create handlers
-	processHandler := handler.NewProcess(feedService, cfg)
-	webhookHandler := handler.NewWebhook(urlService)
 
 	// Create auth middleware
-	authMiddleware := middleware.Auth(cfg.WebhookAuthToken)
+	authMiddleware := middleware.Auth(app.Config.WebhookAuthToken)
 
-	// Setup routes
+	// Setup routes (pure HTTP routing)
 	mux := http.NewServeMux()
-	mux.Handle("/process", authMiddleware(processHandler))
-	mux.Handle("/webhook", authMiddleware(webhookHandler))
-	mux.Handle("/", authMiddleware(processHandler)) // Default to process
+	mux.Handle("/process", authMiddleware(app.ProcessHandler))
+	mux.Handle("/webhook", authMiddleware(app.WebhookHandler))
+	mux.Handle("/", authMiddleware(app.ProcessHandler)) // Default to process
 
 	// Return handler and cleanup function
 	cleanup := func() {
-		container.Close()
+		app.Close()
 	}
 
 	return mux, cleanup, nil
