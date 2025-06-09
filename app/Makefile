@@ -1,4 +1,4 @@
-.PHONY: build test clean run-cli run-server dev fmt vet lint
+.PHONY: build test clean run dev fmt vet lint check-env config
 
 # Go parameters
 GOCMD=go
@@ -17,10 +17,14 @@ SERVER_BINARY=$(BUILD_DIR)/server
 # Default target
 all: test build
 
-# Build CLI binary
-build-cli:
-	mkdir -p $(BUILD_DIR)
-	$(GOBUILD) -o $(CLI_BINARY) ./cmd/cli
+# Check required environment variables
+check-env:
+	@if [ -z "$(FUNCTION_TARGET)" ]; then \
+		echo "❌ Error: FUNCTION_TARGET is not set"; \
+		echo "Please set FUNCTION_TARGET in your .env file or environment"; \
+		exit 1; \
+	fi
+	@echo "✅ FUNCTION_TARGET = $(FUNCTION_TARGET)"
 
 # Build server binary
 build-server:
@@ -28,7 +32,7 @@ build-server:
 	$(GOBUILD) -o $(SERVER_BINARY) ./cmd/server
 
 # Build both binaries
-build: build-cli build-server
+build: build-server
 
 # Test
 test:
@@ -49,16 +53,14 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -f coverage.out coverage.html
 
-# Run CLI
-run-cli:
-	$(GOCMD) run ./cmd/cli
-
-# Run server
-run-server:
+# Run server (Cloud Function mode)
+run: check-env
+	@echo "Starting server with FUNCTION_TARGET=$(FUNCTION_TARGET)"
 	$(GOCMD) run ./cmd/server
 
-# Development server with hot reload (requires air)
-dev:
+# Development server with hot reload (Cloud Function mode)
+dev: check-env
+	@echo "Starting dev server with FUNCTION_TARGET=$(FUNCTION_TARGET)"
 	air -c .air.toml || $(GOCMD) run ./cmd/server
 
 # Format code
@@ -94,19 +96,25 @@ security:
 # All checks
 check: fmt vet lint test-race security
 
+# Show current configuration
+config: check-env
+	@echo "Current configuration:"
+	@echo "  FUNCTION_TARGET = $(FUNCTION_TARGET)"
+	@echo "  GO_ENV = $(GO_ENV)"
+	@echo "  PROJECT_ID = $(PROJECT_ID)"
+
 # Help
 help:
 	@echo "Available targets:"
-	@echo "  build       - Build both CLI and server binaries"
-	@echo "  build-cli   - Build CLI binary only"
-	@echo "  build-server- Build server binary only"
+	@echo "  build       - Build server binary"
 	@echo "  test        - Run tests"
 	@echo "  test-race   - Run tests with race detection"
 	@echo "  test-coverage - Run tests with coverage report"
 	@echo "  clean       - Clean build artifacts"
-	@echo "  run-cli     - Run CLI application"
-	@echo "  run-server  - Run server application"
+	@echo "  run         - Run server in Cloud Function mode"
 	@echo "  dev         - Run development server with hot reload"
+	@echo "  check-env   - Check required environment variables"
+	@echo "  config      - Show current configuration"
 	@echo "  fmt         - Format code"
 	@echo "  vet         - Vet code"
 	@echo "  lint        - Lint code (requires golangci-lint)"
@@ -115,21 +123,4 @@ help:
 	@echo "  generate    - Run go generate"
 	@echo "  security    - Run security checks (requires gosec)"
 	@echo "  check       - Run all checks (fmt, vet, lint, test-race, security)"
-	@echo "  check-env   - Check development environment setup"
 	@echo "  help        - Show this help message"
-
-# Environment check
-.PHONY: check-env
-check-env:
-	@echo "🔍 Checking development environment..."
-	@echo ""
-	@echo "1. Go version:"
-	@eval "$$(mise activate bash)" && go version || echo "❌ Go not found"
-	@echo ""
-	@echo "2. Google Cloud authentication:"
-	@gcloud auth list --format="value(account)" | head -1 | sed 's/^/✅ Authenticated as: /' || echo "❌ Not authenticated to Google Cloud"
-	@echo ""
-	@echo "3. GCS bucket access:"
-	@gsutil ls gs://article-summarizer-processed-articles/ >/dev/null 2>&1 && echo "✅ GCS bucket accessible" || echo "❌ Cannot access GCS bucket"
-	@echo ""
-	@echo "Environment check complete!"

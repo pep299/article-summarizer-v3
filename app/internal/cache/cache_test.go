@@ -8,8 +8,28 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/pep299/article-summarizer-v3/internal/rss"
 )
+
+// testRSSItem is a test implementation of the RSSItem interface
+type testRSSItem struct {
+	title       string
+	link        string
+	description string
+	pubDate     string
+	guid        string
+	category    []string
+	source      string
+	parsedDate  time.Time
+}
+
+func (t *testRSSItem) GetTitle() string         { return t.title }
+func (t *testRSSItem) GetLink() string          { return t.link }
+func (t *testRSSItem) GetDescription() string   { return t.description }
+func (t *testRSSItem) GetPubDate() string       { return t.pubDate }
+func (t *testRSSItem) GetGUID() string          { return t.guid }
+func (t *testRSSItem) GetCategory() []string    { return t.category }
+func (t *testRSSItem) GetSource() string        { return t.source }
+func (t *testRSSItem) GetParsedDate() time.Time { return t.parsedDate }
 
 func TestMemoryCache(t *testing.T) {
 	cache := NewMemoryCache(1 * time.Hour)
@@ -193,12 +213,12 @@ func TestCacheManager(t *testing.T) {
 
 	ctx := context.Background()
 
-	item := rss.Item{
-		Title:      "Test Article",
-		Link:       "http://example.com/test",
-		GUID:       "test-guid",
-		Source:     "test-source",
-		ParsedDate: time.Now(),
+	item := &testRSSItem{
+		title:      "Test Article",
+		link:       "http://example.com/test",
+		guid:       "test-guid",
+		source:     "test-source",
+		parsedDate: time.Now(),
 	}
 
 	// Test MarkAsProcessed
@@ -220,22 +240,22 @@ func TestCacheManager(t *testing.T) {
 func TestGenerateKey(t *testing.T) {
 	tests := []struct {
 		name string
-		item rss.Item
+		item *testRSSItem
 	}{
 		{
 			name: "with GUID",
-			item: rss.Item{
-				Title: "Test Article",
-				Link:  "http://example.com/test?param=value",
-				GUID:  "http://example.com/test?param=value",
+			item: &testRSSItem{
+				title: "Test Article",
+				link:  "http://example.com/test?param=value",
+				guid:  "http://example.com/test?param=value",
 			},
 		},
 		{
 			name: "without GUID",
-			item: rss.Item{
-				Title: "Test Article",
-				Link:  "http://example.com/test?param=value",
-				GUID:  "",
+			item: &testRSSItem{
+				title: "Test Article",
+				link:  "http://example.com/test?param=value",
+				guid:  "",
 			},
 		},
 	}
@@ -334,12 +354,12 @@ func TestCloudStorageCacheManager(t *testing.T) {
 
 	ctx := context.Background()
 
-	item := rss.Item{
-		Title:      "Coverage Test Article",
-		Link:       "http://example.com/coverage-test",
-		GUID:       "coverage-test-guid",
-		Source:     "coverage-test-source",
-		ParsedDate: time.Now(),
+	item := &testRSSItem{
+		title:      "Coverage Test Article",
+		link:       "http://example.com/coverage-test",
+		guid:       "coverage-test-guid",
+		source:     "coverage-test-source",
+		parsedDate: time.Now(),
 	}
 
 	// Setup clean test state with empty cache

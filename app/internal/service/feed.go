@@ -6,8 +6,6 @@ import (
 	"log"
 
 	"github.com/pep299/article-summarizer-v3/internal/repository"
-	"github.com/pep299/article-summarizer-v3/internal/rss"
-	"github.com/pep299/article-summarizer-v3/internal/slack"
 )
 
 type Feed struct {
@@ -47,13 +45,13 @@ func (f *Feed) Process(ctx context.Context, feedName, feedURL, displayName strin
 	}
 
 	// 重複除去とフィルタリング
-	uniqueArticles := rss.GetUniqueItems(articles)
-	filteredArticles := rss.FilterItems(uniqueArticles)
+	uniqueArticles := f.rss.GetUniqueItems(articles)
+	filteredArticles := f.rss.FilterItems(uniqueArticles)
 	
 	log.Printf("After filtering: %d articles remain from %s", len(filteredArticles), displayName)
 
 	// キャッシュチェック
-	var uncachedArticles []rss.Item
+	var uncachedArticles []repository.Item
 	for _, article := range filteredArticles {
 		if f.cache != nil {
 			cached, err := f.cache.IsCached(ctx, article)
@@ -86,7 +84,7 @@ func (f *Feed) Process(ctx context.Context, feedName, feedURL, displayName strin
 	return nil
 }
 
-func (f *Feed) processArticle(ctx context.Context, article rss.Item) error {
+func (f *Feed) processArticle(ctx context.Context, article repository.Item) error {
 	log.Printf("🔍 記事処理開始: %s", article.Title)
 
 	summary, err := f.gemini.SummarizeURL(ctx, article.Link)
@@ -94,7 +92,7 @@ func (f *Feed) processArticle(ctx context.Context, article rss.Item) error {
 		return fmt.Errorf("summarizing article: %w", err)
 	}
 
-	articleSummary := slack.ArticleSummary{
+	articleSummary := repository.ArticleSummary{
 		RSS:     article,
 		Summary: *summary,
 	}

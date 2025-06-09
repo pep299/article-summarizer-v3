@@ -5,12 +5,9 @@ import (
 
 	"github.com/pep299/article-summarizer-v3/internal/cache"
 	"github.com/pep299/article-summarizer-v3/internal/config"
-	"github.com/pep299/article-summarizer-v3/internal/gemini"
 	"github.com/pep299/article-summarizer-v3/internal/handler"
 	"github.com/pep299/article-summarizer-v3/internal/repository"
-	"github.com/pep299/article-summarizer-v3/internal/rss"
 	"github.com/pep299/article-summarizer-v3/internal/service"
-	"github.com/pep299/article-summarizer-v3/internal/slack"
 )
 
 // Application represents the application with all business logic components
@@ -29,23 +26,18 @@ func New() (*Application, error) {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
-	// Initialize low-level clients
+	// Initialize cache manager
 	cacheManager, err := cache.NewCloudStorageCache()
 	if err != nil {
 		return nil, fmt.Errorf("creating cache manager: %w", err)
 	}
 
-	rssClient := rss.NewClient()
-	geminiClient := gemini.NewClient(cfg.GeminiAPIKey, cfg.GeminiModel)
-	slackClient := slack.NewClient(cfg.SlackBotToken, cfg.SlackChannel)
-	webhookSlackClient := slack.NewClient(cfg.SlackBotToken, cfg.WebhookSlackChannel)
-
-	// Create repositories (wrappers around clients)
-	rssRepo := repository.NewRSSRepository(rssClient)
-	geminiRepo := repository.NewGeminiRepository(geminiClient)
+	// Create repositories (now with direct implementations)
+	rssRepo := repository.NewRSSRepository()
+	geminiRepo := repository.NewGeminiRepository(cfg.GeminiAPIKey, cfg.GeminiModel)
 	cacheRepo := repository.NewCacheRepository(cacheManager)
-	slackRepo := repository.NewSlackRepository(slackClient)
-	webhookSlackRepo := repository.NewSlackRepository(webhookSlackClient)
+	slackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannel)
+	webhookSlackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.WebhookSlackChannel)
 
 	// Create services (business logic)
 	feedService := service.NewFeed(rssRepo, cacheRepo, geminiRepo, slackRepo)

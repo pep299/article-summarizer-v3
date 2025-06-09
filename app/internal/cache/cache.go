@@ -12,8 +12,19 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/pep299/article-summarizer-v3/internal/rss"
 )
+
+// RSSItem represents an RSS item for cache operations
+type RSSItem interface {
+	GetTitle() string
+	GetLink() string
+	GetDescription() string
+	GetPubDate() string
+	GetGUID() string
+	GetCategory() []string
+	GetSource() string
+	GetParsedDate() time.Time
+}
 
 // Cache interface defines cache operations
 type Cache interface {
@@ -387,13 +398,13 @@ func (c *MemoryCache) Close() error {
 }
 
 // MarkAsProcessed marks an RSS item as processed (convenience function for CloudStorageCache)
-func MarkAsProcessed(ctx context.Context, cache Cache, item rss.Item) error {
+func MarkAsProcessed(ctx context.Context, cache Cache, item RSSItem) error {
 	key := GenerateKey(item)
 	entry := &CacheEntry{
-		Title:         item.Title,
+		Title:         item.GetTitle(),
 		URL:           key, // Normalized URL
-		Source:        item.Source,
-		PubDate:       item.ParsedDate,
+		Source:        item.GetSource(),
+		PubDate:       item.GetParsedDate(),
 		ProcessedDate: time.Now(),
 	}
 
@@ -401,7 +412,7 @@ func MarkAsProcessed(ctx context.Context, cache Cache, item rss.Item) error {
 }
 
 // IsCached checks if an RSS item is already cached (convenience function for CloudStorageCache)
-func IsCached(ctx context.Context, cache Cache, item rss.Item) (bool, error) {
+func IsCached(ctx context.Context, cache Cache, item RSSItem) (bool, error) {
 	key := GenerateKey(item)
 	return cache.Exists(ctx, key)
 }
@@ -422,11 +433,11 @@ func normalizeURL(rawURL string) (string, error) {
 }
 
 // GenerateKey generates a cache key for an RSS item
-func GenerateKey(item rss.Item) string {
+func GenerateKey(item RSSItem) string {
 	// Use GUID if available, otherwise use link
-	identifier := item.GUID
+	identifier := item.GetGUID()
 	if identifier == "" {
-		identifier = item.Link
+		identifier = item.GetLink()
 	}
 
 	// Normalize URL

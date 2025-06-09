@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/pep299/article-summarizer-v3/internal/repository"
-	"github.com/pep299/article-summarizer-v3/internal/rss"
-	"github.com/pep299/article-summarizer-v3/internal/slack"
 )
 
 type URL struct {
@@ -29,23 +27,21 @@ func (u *URL) Process(ctx context.Context, url string) error {
 	startTime := time.Now()
 	log.Printf("🔍 オンデマンド記事処理開始: %s", url)
 
-	summary, err := u.gemini.SummarizeURL(ctx, url)
+	summary, err := u.gemini.SummarizeURLForOnDemand(ctx, url)
 	if err != nil {
 		return err
 	}
 
-	article := rss.Item{
+	article := repository.Item{
 		Title:  url,
 		Link:   url,
 		Source: "オンデマンドリクエスト",
 	}
 
-	articleSummary := slack.ArticleSummary{
-		RSS:     article,
-		Summary: *summary,
-	}
-
-	if err := u.slack.SendArticleSummary(ctx, articleSummary); err != nil {
+	// Use the on-demand specific method for Slack notification
+	// Note: The targetChannel should be passed from the application layer
+	// For now, using the default channel of the slack repository
+	if err := u.slack.SendOnDemandSummary(ctx, article, *summary, ""); err != nil {
 		return err
 	}
 
