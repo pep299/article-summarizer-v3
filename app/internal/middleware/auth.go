@@ -5,26 +5,24 @@ import (
 	"strings"
 )
 
-type Context interface {
-	Request() *http.Request
-	JSON(code int, obj interface{}) error
-}
-
-type HandlerFunc func(c Context) error
-type MiddlewareFunc func(next HandlerFunc) HandlerFunc
-
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
-func Auth(token string) MiddlewareFunc {
-	return func(next HandlerFunc) HandlerFunc {
-		return func(c Context) error {
-			authHeader := c.Request().Header.Get("Authorization")
-			if !strings.HasPrefix(authHeader, "Bearer "+token) {
-				return c.JSON(401, ErrorResponse{Error: "Unauthorized"})
+// Auth creates an authentication middleware for http.Handler
+func Auth(token string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Check POST method
+			if r.Method != "POST" {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
 			}
-			return next(c)
-		}
+
+			// Check Bearer token
+			authHeader := r.Header.Get("Authorization")
+			if !strings.HasPrefix(authHeader, "Bearer "+token) {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
 	}
 }

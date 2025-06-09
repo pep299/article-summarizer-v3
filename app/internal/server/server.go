@@ -1,65 +1,72 @@
 package server
 
 import (
-	"fmt"
+	"log"
+	"net/http"
 
 	"github.com/pep299/article-summarizer-v3/internal/config"
+	"github.com/pep299/article-summarizer-v3/internal/di"
 	"github.com/pep299/article-summarizer-v3/internal/handler"
-	"github.com/pep299/article-summarizer-v3/internal/model"
-	"github.com/pep299/article-summarizer-v3/internal/router"
+	"github.com/pep299/article-summarizer-v3/internal/middleware"
+	"github.com/pep299/article-summarizer-v3/internal/repository"
 	"github.com/pep299/article-summarizer-v3/internal/service"
 )
 
-type App struct {
-	feedService *service.FeedService
-	urlService  *service.URLService
-}
-
-type Server struct {
-	app    *App
-	router router.Router
-	config *config.Config
-}
-
-func NewServer(cfg *config.Config) (*Server, error) {
-	model.Feeds["hatena"].URL = cfg.HatenaRSSURL
-	model.Feeds["lobsters"].URL = cfg.LobstersRSSURL
-
-	// TODO: Initialize repositories with actual implementations
-	// For now, we'll use nil to maintain compatibility
-	feedService := service.NewFeedService(nil, nil, nil, nil)
-	urlService := service.NewURLService(nil, nil)
-
-	app := &App{
-		feedService: feedService,
-		urlService:  urlService,
+// CreateHandler creates the main HTTP handler for the application
+func CreateHandler() (http.Handler, func(), error) {
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, nil, err
 	}
 
-	webhookHandler := handler.NewWebhookHandler(urlService)
-	processHandler := handler.NewProcessHandler(feedService)
+	// Create DI container
+	container, err := di.NewContainer(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	httpRouter := router.NewHTTPRouter(webhookHandler, processHandler, cfg)
-	httpRouter.SetupRoutes()
+	// Create repositories
+	rssRepo := repository.NewRSSRepository(container.RSSClient)
+	geminiRepo := repository.NewGeminiRepository(container.GeminiClient)
+	cacheRepo := repository.NewCacheRepository(container.CacheManager)
+	slackRepo := repository.NewSlackRepository(container.SlackClient)
+	webhookSlackRepo := repository.NewSlackRepository(container.WebhookSlackClient)
 
-	return &Server{
-		app:    app,
-		router: httpRouter,
-		config: cfg,
-	}, nil
+	// Create services
+	feedService := service.NewFeed(rssRepo, cacheRepo, geminiRepo, slackRepo)
+	urlService := service.NewURL(geminiRepo, webhookSlackRepo)
+
+	// Create handlers
+	processHandler := handler.NewProcess(feedService, cfg)
+	webhookHandler := handler.NewWebhook(urlService)
+
+	// Create auth middleware
+	authMiddleware := middleware.Auth(cfg.WebhookAuthToken)
+
+	// Setup routes
+	mux := http.NewServeMux()
+	mux.Handle("/process", authMiddleware(processHandler))
+	mux.Handle("/webhook", authMiddleware(webhookHandler))
+	mux.Handle("/", authMiddleware(processHandler)) // Default to process
+
+	// Return handler and cleanup function
+	cleanup := func() {
+		container.Close()
+	}
+
+	return mux, cleanup, nil
 }
 
-func (s *Server) Start() error {
-	return s.router.Run()
-}
+// HandleRequest handles a single HTTP request (for Cloud Functions)
+func HandleRequest(w http.ResponseWriter, r *http.Request) {
+	handler, cleanup, err := CreateHandler()
+	if err != nil {
+		log.Printf("Failed to create handler: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	defer cleanup()
 
-func (s *Server) ProcessSingleFeed(feedName string) error {
-	// For backwards compatibility - delegate to the old handlers package
-	// TODO: This should use s.app.feedService.ProcessFeed() once repositories are implemented
-	return fmt.Errorf("not implemented - use handlers.Server for now")
-}
-
-func (s *Server) ProcessSingleURL(url string) error {
-	// For backwards compatibility - delegate to the old handlers package
-	// TODO: This should use s.app.urlService.ProcessURL() once repositories are implemented
-	return fmt.Errorf("not implemented - use handlers.Server for now")
+	handler.ServeHTTP(w, r)
 }

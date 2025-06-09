@@ -2,24 +2,21 @@ package main
 
 import (
 	"log"
+	"net/http"
 
-	"github.com/pep299/article-summarizer-v3/internal/config"
 	"github.com/pep299/article-summarizer-v3/internal/server"
 )
 
 func main() {
-	cfg, err := config.Load()
+	// Create handler
+	handler, cleanup, err := server.CreateHandler()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		log.Fatalf("Failed to create handler: %v", err)
 	}
+	defer cleanup()
 
-	srv, err := server.NewServer(cfg)
-	if err != nil {
-		log.Fatalf("Failed to create server: %v", err)
-	}
-
-	log.Println("Starting Article Summarizer server...")
-	if err := srv.Start(); err != nil {
+	log.Println("Server starting on :8080")
+	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }

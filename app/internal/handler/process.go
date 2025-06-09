@@ -2,69 +2,68 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
-	"github.com/pep299/article-summarizer-v3/internal/middleware"
+	"github.com/pep299/article-summarizer-v3/internal/config"
 	"github.com/pep299/article-summarizer-v3/internal/service"
 )
 
-type ProcessHandler struct {
-	service *service.FeedService
+type Process struct {
+	feedService *service.Feed
+	config      *config.Config
 }
 
-func NewProcessHandler(service *service.FeedService) *ProcessHandler {
-	return &ProcessHandler{
-		service: service,
+func NewProcess(feedService *service.Feed, config *config.Config) *Process {
+	return &Process{
+		feedService: feedService,
+		config:      config,
 	}
 }
 
-type ProcessRequest struct {
+type processRequest struct {
 	FeedName string `json:"feedName"`
 }
 
-func (r *ProcessRequest) Validate() error {
-	if r.FeedName == "" {
-		return &ValidationError{Field: "feedName", Message: "FeedName is required"}
-	}
-	return nil
-}
+func (h *Process) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 
-type ProcessContext struct {
-	w http.ResponseWriter
-	r *http.Request
-}
-
-func (c *ProcessContext) Request() *http.Request {
-	return c.r
-}
-
-func (c *ProcessContext) JSON(code int, obj interface{}) error {
-	c.w.Header().Set("Content-Type", "application/json")
-	c.w.WriteHeader(code)
-	return json.NewEncoder(c.w).Encode(obj)
-}
-
-func (c *ProcessContext) Bind(obj interface{}) error {
-	return json.NewDecoder(c.r.Body).Decode(obj)
-}
-
-func (h *ProcessHandler) Handle(w http.ResponseWriter, r *http.Request) error {
-	c := &ProcessContext{w: w, r: r}
-	
-	var req ProcessRequest
-	if err := c.Bind(&req); err != nil {
-		return c.JSON(400, middleware.ErrorResponse{Error: "Invalid JSON"})
+	var req processRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(errorResponse{Error: "Invalid JSON"})
+		return
 	}
 
-	if err := req.Validate(); err != nil {
-		return c.JSON(400, middleware.ErrorResponse{Error: err.Error()})
+	if req.FeedName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(errorResponse{Error: "FeedName is required"})
+		return
 	}
 
-	if err := h.service.ProcessFeed(c.Request().Context(), req.FeedName); err != nil {
-		return c.JSON(500, middleware.ErrorResponse{Error: err.Error()})
+	// フィード設定を取得
+	var feedURL, displayName string
+	switch req.FeedName {
+	case "hatena":
+		feedURL = h.config.HatenaRSSURL
+		displayName = "はてブ テクノロジー"
+	case "lobsters":
+		feedURL = h.config.LobstersRSSURL
+		displayName = "Lobsters"
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(errorResponse{Error: fmt.Sprintf("Unknown feed: %s", req.FeedName)})
+		return
 	}
 
-	return c.JSON(200, SuccessResponse{
+	if err := h.feedService.Process(r.Context(), req.FeedName, feedURL, displayName); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(errorResponse{Error: err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(successResponse{
 		Status:  "success",
 		Message: "Feed processed successfully",
 	})
