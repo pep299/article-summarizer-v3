@@ -16,7 +16,7 @@ func init() {
 	}
 
 	log.Printf("✅ Registering function: %s", functionTarget)
-	
+
 	// 関数を登録
 	functions.HTTP(functionTarget, server.HandleRequest)
 }

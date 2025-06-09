@@ -30,13 +30,13 @@ func (i *Item) GetUniqueID() string {
 }
 
 // Implement cache.RSSItem interface
-func (i *Item) GetTitle() string       { return i.Title }
-func (i *Item) GetLink() string        { return i.Link }
-func (i *Item) GetDescription() string { return i.Description }
-func (i *Item) GetPubDate() string     { return i.PubDate }
-func (i *Item) GetGUID() string        { return i.GUID }
-func (i *Item) GetCategory() []string  { return i.Category }
-func (i *Item) GetSource() string      { return i.Source }
+func (i *Item) GetTitle() string         { return i.Title }
+func (i *Item) GetLink() string          { return i.Link }
+func (i *Item) GetDescription() string   { return i.Description }
+func (i *Item) GetPubDate() string       { return i.PubDate }
+func (i *Item) GetGUID() string          { return i.GUID }
+func (i *Item) GetCategory() []string    { return i.Category }
+func (i *Item) GetSource() string        { return i.Source }
 func (i *Item) GetParsedDate() time.Time { return i.ParsedDate }
 
 type RSSRepository interface {

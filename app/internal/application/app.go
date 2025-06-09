@@ -3,53 +3,49 @@ package application
 import (
 	"fmt"
 
-	"github.com/pep299/article-summarizer-v3/internal/infrastructure"
-	"github.com/pep299/article-summarizer-v3/internal/transport/handler"
 	"github.com/pep299/article-summarizer-v3/internal/repository"
 	"github.com/pep299/article-summarizer-v3/internal/service"
+	"github.com/pep299/article-summarizer-v3/internal/transport/handler"
 )
 
 // Application represents the application with all business logic components
 type Application struct {
-	Config           *infrastructure.Config
-	ProcessHandler   *handler.Process
-	WebhookHandler   *handler.Webhook
-	cleanup          func() error
+	Config         *Config
+	ProcessHandler *handler.Process
+	WebhookHandler *handler.Webhook
+	cleanup        func() error
 }
 
 // New creates a new application instance with all dependencies
 func New() (*Application, error) {
 	// Load configuration
-	cfg, err := infrastructure.Load()
+	cfg, err := Load()
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
-	}
-
-	// Initialize cache manager
-	cacheManager, err := infrastructure.NewCloudStorageCache()
-	if err != nil {
-		return nil, fmt.Errorf("creating cache manager: %w", err)
 	}
 
 	// Create repositories (now with direct implementations)
 	rssRepo := repository.NewRSSRepository()
 	geminiRepo := repository.NewGeminiRepository(cfg.GeminiAPIKey, cfg.GeminiModel)
-	cacheRepo := repository.NewCacheRepository(cacheManager)
+	processedRepo, err := repository.NewProcessedArticleRepository()
+	if err != nil {
+		return nil, fmt.Errorf("creating processed article repository: %w", err)
+	}
 	slackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannel)
 	webhookSlackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.WebhookSlackChannel)
 
 	// Create services (business logic)
-	feedService := service.NewFeed(rssRepo, cacheRepo, geminiRepo, slackRepo)
+	feedService := service.NewFeed(rssRepo, processedRepo, geminiRepo, slackRepo, cfg.HatenaRSSURL, cfg.LobstersRSSURL)
 	urlService := service.NewURL(geminiRepo, webhookSlackRepo)
 
 	// Create handlers (HTTP layer)
-	processHandler := handler.NewProcess(feedService, cfg)
+	processHandler := handler.NewProcess(feedService)
 	webhookHandler := handler.NewWebhook(urlService)
 
 	// Cleanup function
 	cleanup := func() error {
-		if cacheManager != nil {
-			return cacheManager.Close()
+		if processedRepo != nil {
+			return processedRepo.Close()
 		}
 		return nil
 	}

@@ -9,29 +9,60 @@ import (
 )
 
 type Feed struct {
-	rss     repository.RSSRepository
-	cache   repository.CacheRepository
-	gemini  repository.GeminiRepository
-	slack   repository.SlackRepository
+	rss       repository.RSSRepository
+	processed repository.ProcessedArticleRepository
+	gemini    repository.GeminiRepository
+	slack     repository.SlackRepository
+	feedURLs  map[string]FeedConfig
+}
+
+type FeedConfig struct {
+	URL         string
+	DisplayName string
 }
 
 func NewFeed(
 	rss repository.RSSRepository,
-	cache repository.CacheRepository,
+	processed repository.ProcessedArticleRepository,
 	gemini repository.GeminiRepository,
 	slack repository.SlackRepository,
+	hatenaURL, lobstersURL string,
 ) *Feed {
 	return &Feed{
-		rss:    rss,
-		cache:  cache,
-		gemini: gemini,
-		slack:  slack,
+		rss:       rss,
+		processed: processed,
+		gemini:    gemini,
+		slack:     slack,
+		feedURLs: map[string]FeedConfig{
+			"hatena": {
+				URL:         hatenaURL,
+				DisplayName: "はてブ テクノロジー",
+			},
+			"lobsters": {
+				URL:         lobstersURL,
+				DisplayName: "Lobsters",
+			},
+		},
 	}
 }
 
-func (f *Feed) Process(ctx context.Context, feedName, feedURL, displayName string) error {
+func (f *Feed) Process(ctx context.Context, feedName string) error {
+	feedConfig, exists := f.feedURLs[feedName]
+	if !exists {
+		return fmt.Errorf("unknown feed: %s", feedName)
+	}
+	feedURL := feedConfig.URL
+	displayName := feedConfig.DisplayName
 	log.Printf("📡 RSS取得開始: %s", displayName)
 
+	// Cloud Function startup: Load processed articles index
+	processedIndex, err := f.processed.LoadIndex(ctx)
+	if err != nil {
+		return fmt.Errorf("loading processed articles index: %w", err)
+	}
+	log.Printf("📋 処理済み記事インデックス読み込み完了: %d件", len(processedIndex))
+
+	// Fetch RSS feed
 	articles, err := f.rss.FetchFeed(ctx, displayName, feedURL)
 	if err != nil {
 		return fmt.Errorf("fetching RSS feed %s: %w", feedName, err)
@@ -47,40 +78,33 @@ func (f *Feed) Process(ctx context.Context, feedName, feedURL, displayName strin
 	// 重複除去とフィルタリング
 	uniqueArticles := f.rss.GetUniqueItems(articles)
 	filteredArticles := f.rss.FilterItems(uniqueArticles)
-	
+
 	log.Printf("After filtering: %d articles remain from %s", len(filteredArticles), displayName)
 
-	// キャッシュチェック
-	var uncachedArticles []repository.Item
+	// Check against processed articles using in-memory index
+	var unprocessedArticles []repository.Item
 	for _, article := range filteredArticles {
-		if f.cache != nil {
-			cached, err := f.cache.IsCached(ctx, article)
-			if err != nil {
-				return fmt.Errorf("checking cache for article %s: %w", article.Title, err)
-			}
-			if !cached {
-				uncachedArticles = append(uncachedArticles, article)
-			}
-		} else {
-			uncachedArticles = append(uncachedArticles, article)
+		key := f.processed.GenerateKey(article)
+		if !f.processed.IsProcessed(key, processedIndex) {
+			unprocessedArticles = append(unprocessedArticles, article)
 		}
 	}
 
-	log.Printf("Processing %d new articles from %s", len(uncachedArticles), displayName)
+	log.Printf("Processing %d new articles from %s", len(unprocessedArticles), displayName)
 
-	if len(uncachedArticles) == 0 {
+	if len(unprocessedArticles) == 0 {
 		log.Printf("✅ 新着記事はありません: %s", displayName)
 		return nil
 	}
 
 	// 各記事を処理
-	for _, article := range uncachedArticles {
+	for _, article := range unprocessedArticles {
 		if err := f.processArticle(ctx, article); err != nil {
 			return fmt.Errorf("processing article %s: %w", article.Title, err)
 		}
 	}
 
-	log.Printf("🎉 %s処理完了: %d件成功", displayName, len(uncachedArticles))
+	log.Printf("🎉 %s処理完了: %d件成功", displayName, len(unprocessedArticles))
 	return nil
 }
 
@@ -101,10 +125,9 @@ func (f *Feed) processArticle(ctx context.Context, article repository.Item) erro
 		return fmt.Errorf("sending Slack notification: %w", err)
 	}
 
-	if f.cache != nil {
-		if err := f.cache.MarkAsProcessed(ctx, article); err != nil {
-			return fmt.Errorf("caching article: %w", err)
-		}
+	// Mark as processed (includes GCS re-fetch and update)
+	if err := f.processed.MarkAsProcessed(ctx, article); err != nil {
+		return fmt.Errorf("marking as processed: %w", err)
 	}
 
 	log.Printf("✅ 記事処理完了: %s", article.Title)

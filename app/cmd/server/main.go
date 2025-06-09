@@ -4,8 +4,8 @@ import (
 	"log"
 
 	// cloud_function.goのinit()を実行したいので
-	_ "github.com/pep299/article-summarizer-v3"
 	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
+	_ "github.com/pep299/article-summarizer-v3"
 )
 
 func main() {
