@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/pep299/article-summarizer-v3/internal/application"
-	"github.com/pep299/article-summarizer-v3/internal/config"
+	"github.com/pep299/article-summarizer-v3/internal/infrastructure"
 )
 
 func TestMain(m *testing.M) {
@@ -109,7 +109,7 @@ func TestIntegration_ConfigValidation(t *testing.T) {
 			}
 
 			// Try to load config
-			_, err := config.Load()
+			_, err := infrastructure.Load()
 
 			if tc.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -165,7 +165,7 @@ func TestIntegration_ApplicationLifecycle(t *testing.T) {
 }
 
 func TestIntegration_FeedConfiguration(t *testing.T) {
-	cfg, err := config.Load()
+	cfg, err := infrastructure.Load()
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
@@ -239,7 +239,7 @@ func BenchmarkIntegration_ApplicationCreation(b *testing.B) {
 
 func BenchmarkIntegration_ConfigLoad(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		_, err := config.Load()
+		_, err := infrastructure.Load()
 		if err != nil {
 			b.Fatalf("Failed to load config: %v", err)
 		}

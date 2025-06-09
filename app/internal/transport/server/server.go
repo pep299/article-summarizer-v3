@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/pep299/article-summarizer-v3/internal/application"
-	"github.com/pep299/article-summarizer-v3/internal/middleware"
+	"github.com/pep299/article-summarizer-v3/internal/transport/middleware"
 )
 
 // CreateHandler creates the main HTTP handler for the application

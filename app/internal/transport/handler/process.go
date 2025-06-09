@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/pep299/article-summarizer-v3/internal/config"
+	"github.com/pep299/article-summarizer-v3/internal/infrastructure"
 	"github.com/pep299/article-summarizer-v3/internal/service"
 )
 
 type Process struct {
 	feedService *service.Feed
-	config      *config.Config
+	config      *infrastructure.Config
 }
 
-func NewProcess(feedService *service.Feed, config *config.Config) *Process {
+func NewProcess(feedService *service.Feed, config *infrastructure.Config) *Process {
 	return &Process{
 		feedService: feedService,
 		config:      config,

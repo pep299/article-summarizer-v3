@@ -3,16 +3,15 @@ package application
 import (
 	"fmt"
 
-	"github.com/pep299/article-summarizer-v3/internal/cache"
-	"github.com/pep299/article-summarizer-v3/internal/config"
-	"github.com/pep299/article-summarizer-v3/internal/handler"
+	"github.com/pep299/article-summarizer-v3/internal/infrastructure"
+	"github.com/pep299/article-summarizer-v3/internal/transport/handler"
 	"github.com/pep299/article-summarizer-v3/internal/repository"
 	"github.com/pep299/article-summarizer-v3/internal/service"
 )
 
 // Application represents the application with all business logic components
 type Application struct {
-	Config           *config.Config
+	Config           *infrastructure.Config
 	ProcessHandler   *handler.Process
 	WebhookHandler   *handler.Webhook
 	cleanup          func() error
@@ -21,13 +20,13 @@ type Application struct {
 // New creates a new application instance with all dependencies
 func New() (*Application, error) {
 	// Load configuration
-	cfg, err := config.Load()
+	cfg, err := infrastructure.Load()
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
 	// Initialize cache manager
-	cacheManager, err := cache.NewCloudStorageCache()
+	cacheManager, err := infrastructure.NewCloudStorageCache()
 	if err != nil {
 		return nil, fmt.Errorf("creating cache manager: %w", err)
 	}
