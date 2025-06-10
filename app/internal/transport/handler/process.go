@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/pep299/article-summarizer-v3/internal/service"
+	"github.com/pep299/article-summarizer-v3/internal/transport/response"
 )
 
 type Process struct {
@@ -22,30 +23,21 @@ type processRequest struct {
 }
 
 func (h *Process) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	var req processRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(errorResponse{Error: "Invalid JSON"})
+		response.WriteBadRequest(w, "Invalid JSON")
 		return
 	}
 
 	if req.FeedName == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(errorResponse{Error: "FeedName is required"})
+		response.WriteBadRequest(w, "FeedName is required")
 		return
 	}
 
 	if err := h.feedService.Process(r.Context(), req.FeedName); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(errorResponse{Error: err.Error()})
+		response.WriteInternalError(w, err.Error())
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(successResponse{
-		Status:  "success",
-		Message: "Feed processed successfully",
-	})
+	response.WriteSuccess(w, "Feed processed successfully", nil)
 }

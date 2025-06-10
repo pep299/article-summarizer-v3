@@ -419,8 +419,13 @@ func TestE2E_WebhookToSlack(t *testing.T) {
 		t.Errorf("Expected status 'success', got '%v'", result["status"])
 	}
 
-	if result["url"] != testURL {
-		t.Errorf("Expected URL '%s', got '%v'", testURL, result["url"])
+	// Check URL in data field
+	if data, ok := result["data"].(map[string]interface{}); ok {
+		if data["url"] != testURL {
+			t.Errorf("Expected URL '%s', got '%v'", testURL, data["url"])
+		}
+	} else {
+		t.Error("Expected data field with URL")
 	}
 
 	t.Logf("✅ E2E Test passed: Webhook URL → Summarization → Slack (#dev-null)")
