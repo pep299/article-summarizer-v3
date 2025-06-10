@@ -24,10 +24,6 @@ type Config struct {
 
 	// Webhook settings
 	WebhookAuthToken string `json:"-"` // Don't expose in JSON
-
-	// RSS settings
-	HatenaRSSURL   string `json:"hatena_rss_url"`
-	LobstersRSSURL string `json:"lobsters_rss_url"`
 }
 
 // Load reads configuration from environment variables and .env file
@@ -44,8 +40,6 @@ func Load() (*Config, error) {
 		SlackChannel:        getEnvOrDefault("SLACK_CHANNEL", "#article-summarizer"),
 		WebhookSlackChannel: getEnvOrDefault("WEBHOOK_SLACK_CHANNEL", "#ondemand-article-summary"),
 		WebhookAuthToken:    getEnvOrDefault("WEBHOOK_AUTH_TOKEN", ""),
-		HatenaRSSURL:        "https://b.hatena.ne.jp/hotentry/it.rss",
-		LobstersRSSURL:      "https://lobste.rs/rss",
 	}
 
 	return config, config.validate()

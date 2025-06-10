@@ -41,24 +41,7 @@ func TestLoadConfig(t *testing.T) {
 		t.Errorf("Expected WebhookSlackChannel to be '#ondemand-article-summary', got '%s'", cfg.WebhookSlackChannel)
 	}
 
-	// Check RSS feeds configuration
-	if cfg.HatenaRSSURL == "" {
-		t.Error("Expected HatenaRSSURL to be configured")
-	}
-
-	if cfg.LobstersRSSURL == "" {
-		t.Error("Expected LobstersRSSURL to be configured")
-	}
-
-	expectedHatenaURL := "https://b.hatena.ne.jp/hotentry/it.rss"
-	if cfg.HatenaRSSURL != expectedHatenaURL {
-		t.Errorf("Expected HatenaRSSURL to be '%s', got '%s'", expectedHatenaURL, cfg.HatenaRSSURL)
-	}
-
-	expectedLobstersURL := "https://lobste.rs/rss"
-	if cfg.LobstersRSSURL != expectedLobstersURL {
-		t.Errorf("Expected LobstersRSSURL to be '%s', got '%s'", expectedLobstersURL, cfg.LobstersRSSURL)
-	}
+	// RSS feeds are now configured in feed/config.go, not in main config
 }
 
 func TestConfigValidation(t *testing.T) {

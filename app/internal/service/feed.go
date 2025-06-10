@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/pep299/article-summarizer-v3/internal/repository"
+	"github.com/pep299/article-summarizer-v3/internal/service/feed"
 )
 
 type Feed struct {
@@ -15,12 +16,7 @@ type Feed struct {
 	processed repository.ProcessedArticleRepository
 	gemini    repository.GeminiRepository
 	slack     repository.SlackRepository
-	feedURLs  map[string]FeedConfig
-}
-
-type FeedConfig struct {
-	URL         string
-	DisplayName string
+	registry  *feed.FeedRegistry
 }
 
 func NewFeed(
@@ -28,31 +24,31 @@ func NewFeed(
 	processed repository.ProcessedArticleRepository,
 	gemini repository.GeminiRepository,
 	slack repository.SlackRepository,
-	hatenaURL, lobstersURL string,
 ) *Feed {
+	// Initialize feed registry and register all default strategies
+	registry := feed.NewFeedRegistry()
+
+	// Register all default feeds - no hard-coded names here!
+	for _, strategy := range feed.GetDefaultFeeds() {
+		registry.Register(strategy)
+	}
+
 	return &Feed{
 		rss:       rss,
 		processed: processed,
 		gemini:    gemini,
 		slack:     slack,
-		feedURLs: map[string]FeedConfig{
-			"hatena": {
-				URL:         hatenaURL,
-				DisplayName: "はてブ テクノロジー",
-			},
-			"lobsters": {
-				URL:         lobstersURL,
-				DisplayName: "Lobsters",
-			},
-		},
+		registry:  registry,
 	}
 }
 
 func (f *Feed) Process(ctx context.Context, feedName string) error {
-	feedConfig, exists := f.feedURLs[feedName]
+	strategy, exists := f.registry.GetStrategy(feedName)
 	if !exists {
 		return fmt.Errorf("unknown feed: %s", feedName)
 	}
+
+	feedConfig := strategy.GetConfig()
 	feedURL := feedConfig.URL
 	displayName := feedConfig.DisplayName
 	log.Printf("📡 RSS取得開始: %s", displayName)
@@ -64,10 +60,27 @@ func (f *Feed) Process(ctx context.Context, feedName string) error {
 	}
 	log.Printf("📋 処理済み記事インデックス読み込み完了: %d件", len(processedIndex))
 
-	// Fetch RSS feed
-	articles, err := f.rss.FetchFeed(ctx, displayName, feedURL)
+	// Fetch RSS XML using strategy-specific headers
+	headers := strategy.GetRequestHeaders()
+	xmlContent, err := f.rss.FetchFeedXML(ctx, feedURL, headers)
 	if err != nil {
 		return fmt.Errorf("fetching RSS feed %s: %w", feedName, err)
+	}
+
+	// Parse XML using strategy-specific parser
+	articles, err := strategy.ParseFeed(xmlContent)
+	if err != nil {
+		return fmt.Errorf("parsing RSS feed %s: %w", feedName, err)
+	}
+
+	// Set source and parse dates for all items
+	for i := range articles {
+		articles[i].Source = feedName
+		if articles[i].PubDate != "" {
+			if parsedDate, err := strategy.ParseDate(articles[i].PubDate); err == nil {
+				articles[i].ParsedDate = parsedDate
+			}
+		}
 	}
 
 	log.Printf("📄 %d件の記事を取得: %s", len(articles), displayName)
@@ -79,7 +92,7 @@ func (f *Feed) Process(ctx context.Context, feedName string) error {
 
 	// 重複除去とフィルタリング
 	uniqueArticles := f.rss.GetUniqueItems(articles)
-	filteredArticles := f.rss.FilterItems(uniqueArticles)
+	filteredArticles := strategy.FilterItems(uniqueArticles)
 
 	log.Printf("After filtering: %d articles remain from %s", len(filteredArticles), displayName)
 

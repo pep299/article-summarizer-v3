@@ -175,31 +175,13 @@ func TestIntegration_ApplicationLifecycle(t *testing.T) {
 }
 
 func TestIntegration_FeedConfiguration(t *testing.T) {
-	cfg, err := application.Load()
+	_, err := application.Load()
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Verify expected feed URLs are configured
-	if cfg.HatenaRSSURL == "" {
-		t.Error("Expected HatenaRSSURL to be configured")
-	}
-
-	if cfg.LobstersRSSURL == "" {
-		t.Error("Expected LobstersRSSURL to be configured")
-	}
-
-	// Check default URLs
-	expectedHatenaURL := "https://b.hatena.ne.jp/hotentry/it.rss"
-	expectedLobstersURL := "https://lobste.rs/rss"
-
-	if cfg.HatenaRSSURL != expectedHatenaURL {
-		t.Errorf("Expected HatenaRSSURL to be '%s', got '%s'", expectedHatenaURL, cfg.HatenaRSSURL)
-	}
-
-	if cfg.LobstersRSSURL != expectedLobstersURL {
-		t.Errorf("Expected LobstersRSSURL to be '%s', got '%s'", expectedLobstersURL, cfg.LobstersRSSURL)
-	}
+	// Feed URLs are now configured in feed/config.go as default strategies
+	// This test validates the basic config loading works
 }
 
 func TestIntegration_ErrorPropagation(t *testing.T) {

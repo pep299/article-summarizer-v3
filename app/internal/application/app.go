@@ -35,7 +35,7 @@ func New() (*Application, error) {
 	webhookSlackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.WebhookSlackChannel)
 
 	// Create services (business logic)
-	feedService := service.NewFeed(rssRepo, processedRepo, geminiRepo, slackRepo, cfg.HatenaRSSURL, cfg.LobstersRSSURL)
+	feedService := service.NewFeed(rssRepo, processedRepo, geminiRepo, slackRepo)
 	urlService := service.NewURL(geminiRepo, webhookSlackRepo)
 
 	// Create handlers (HTTP layer)
