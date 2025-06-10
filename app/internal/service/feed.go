@@ -48,29 +48,46 @@ func (f *Feed) Process(ctx context.Context, feedName string) error {
 		return fmt.Errorf("unknown feed: %s", feedName)
 	}
 
-	feedConfig := strategy.GetConfig()
-	feedURL := feedConfig.URL
-	displayName := feedConfig.DisplayName
-	log.Printf("📡 RSS取得開始: %s", displayName)
-
-	// Cloud Function startup: Load processed articles index
 	processedIndex, err := f.processed.LoadIndex(ctx)
 	if err != nil {
 		return fmt.Errorf("loading processed articles index: %w", err)
 	}
-	log.Printf("📋 処理済み記事インデックス読み込み完了: %d件", len(processedIndex))
+
+	articles, err := f.fetchAndPrepareArticles(ctx, strategy, feedName)
+	if err != nil {
+		return err
+	}
+
+	if len(articles) == 0 {
+		log.Printf("📋 新着記事はありませんでした: %s", strategy.GetConfig().DisplayName)
+		return nil
+	}
+
+	unprocessedArticles := f.selectUnprocessedArticles(articles, processedIndex, strategy.GetConfig().DisplayName)
+	if len(unprocessedArticles) == 0 {
+		log.Printf("✅ 新着記事はありません: %s", strategy.GetConfig().DisplayName)
+		return nil
+	}
+
+	return f.processArticles(ctx, unprocessedArticles, strategy.GetConfig().DisplayName)
+}
+
+// fetchAndPrepareArticles handles RSS fetching, parsing, and basic preparation
+func (f *Feed) fetchAndPrepareArticles(ctx context.Context, strategy feed.FeedStrategy, feedName string) ([]repository.Item, error) {
+	config := strategy.GetConfig()
+	log.Printf("📡 RSS取得開始: %s", config.DisplayName)
 
 	// Fetch RSS XML using strategy-specific headers
 	headers := strategy.GetRequestHeaders()
-	xmlContent, err := f.rss.FetchFeedXML(ctx, feedURL, headers)
+	xmlContent, err := f.rss.FetchFeedXML(ctx, config.URL, headers)
 	if err != nil {
-		return fmt.Errorf("fetching RSS feed %s: %w", feedName, err)
+		return nil, fmt.Errorf("fetching RSS feed %s: %w", feedName, err)
 	}
 
 	// Parse XML using strategy-specific parser
 	articles, err := strategy.ParseFeed(xmlContent)
 	if err != nil {
-		return fmt.Errorf("parsing RSS feed %s: %w", feedName, err)
+		return nil, fmt.Errorf("parsing RSS feed %s: %w", feedName, err)
 	}
 
 	// Set source and parse dates for all items
@@ -83,29 +100,28 @@ func (f *Feed) Process(ctx context.Context, feedName string) error {
 		}
 	}
 
-	log.Printf("📄 %d件の記事を取得: %s", len(articles), displayName)
+	log.Printf("📄 %d件の記事を取得: %s", len(articles), config.DisplayName)
 
-	if len(articles) == 0 {
-		log.Printf("📋 新着記事はありませんでした: %s", displayName)
-		return nil
-	}
-
-	// 重複除去とフィルタリング
+	// Apply feed-specific filtering and deduplication
 	uniqueArticles := f.rss.GetUniqueItems(articles)
 	filteredArticles := strategy.FilterItems(uniqueArticles)
 
-	log.Printf("After filtering: %d articles remain from %s", len(filteredArticles), displayName)
+	log.Printf("After filtering: %d articles remain from %s", len(filteredArticles), config.DisplayName)
+	return filteredArticles, nil
+}
 
+// selectUnprocessedArticles filters out already processed articles and applies test limits
+func (f *Feed) selectUnprocessedArticles(articles []repository.Item, processedIndex map[string]*repository.IndexEntry, displayName string) []repository.Item {
 	// Check against processed articles using in-memory index
 	var unprocessedArticles []repository.Item
-	for _, article := range filteredArticles {
+	for _, article := range articles {
 		key := f.processed.GenerateKey(article)
 		if !f.processed.IsProcessed(key, processedIndex) {
 			unprocessedArticles = append(unprocessedArticles, article)
 		}
 	}
 
-	// テスト環境での記事数制限
+	// Apply test environment article limit
 	if testLimit := os.Getenv("TEST_MAX_ARTICLES"); testLimit != "" {
 		if limit, err := strconv.Atoi(testLimit); err == nil && limit > 0 && limit < len(unprocessedArticles) {
 			log.Printf("TEST_MAX_ARTICLES制限により %d件に制限", limit)
@@ -114,20 +130,18 @@ func (f *Feed) Process(ctx context.Context, feedName string) error {
 	}
 
 	log.Printf("Processing %d new articles from %s", len(unprocessedArticles), displayName)
+	return unprocessedArticles
+}
 
-	if len(unprocessedArticles) == 0 {
-		log.Printf("✅ 新着記事はありません: %s", displayName)
-		return nil
-	}
-
-	// 各記事を処理
-	for _, article := range unprocessedArticles {
+// processArticles handles the summarization and notification for all articles
+func (f *Feed) processArticles(ctx context.Context, articles []repository.Item, displayName string) error {
+	for _, article := range articles {
 		if err := f.processArticle(ctx, article); err != nil {
 			return fmt.Errorf("processing article %s: %w", article.Title, err)
 		}
 	}
 
-	log.Printf("🎉 %s処理完了: %d件成功", displayName, len(unprocessedArticles))
+	log.Printf("🎉 %s処理完了: %d件成功", displayName, len(articles))
 	return nil
 }
 
