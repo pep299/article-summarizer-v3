@@ -20,4 +20,3 @@ type FeedConfig struct {
 	URL         string
 	DisplayName string
 }
-

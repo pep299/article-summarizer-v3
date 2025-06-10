@@ -70,11 +70,11 @@ func (l *LobstersStrategy) GetRequestHeaders() map[string]string {
 func (l *LobstersStrategy) ParseDate(dateStr string) (time.Time, error) {
 	// Lobsters uses standard RSS date formats
 	formats := []string{
-		time.RFC1123Z,     // Most common for RSS
+		time.RFC1123Z, // Most common for RSS
 		time.RFC1123,
 		"Mon, 2 Jan 2006 15:04:05 -0700",
 		"Mon, 2 Jan 2006 15:04:05 MST",
-		time.RFC3339,      // Sometimes used
+		time.RFC3339, // Sometimes used
 	}
 
 	for _, format := range formats {
@@ -85,4 +85,3 @@ func (l *LobstersStrategy) ParseDate(dateStr string) (time.Time, error) {
 
 	return time.Time{}, fmt.Errorf("unable to parse Lobsters date: %s", dateStr)
 }
-

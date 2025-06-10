@@ -51,8 +51,8 @@ func (h *HatenaStrategy) GetRequestHeaders() map[string]string {
 func (h *HatenaStrategy) ParseDate(dateStr string) (time.Time, error) {
 	// Hatena uses standard RFC formats
 	formats := []string{
-		time.RFC3339,      // Most common for Hatena
-		time.RFC1123Z,     
+		time.RFC3339, // Most common for Hatena
+		time.RFC1123Z,
 		time.RFC1123,
 		"2006-01-02T15:04:05Z",
 	}

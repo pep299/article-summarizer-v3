@@ -73,7 +73,6 @@ func (r *rssRepository) FetchFeedXML(ctx context.Context, url string, headers ma
 	return string(body), nil
 }
 
-
 func (r *rssRepository) GetUniqueItems(items []Item) []Item {
 	seen := make(map[string]bool)
 	var unique []Item

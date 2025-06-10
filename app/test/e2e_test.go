@@ -170,6 +170,10 @@ func verifyGCSIndexUpdated(t *testing.T, expectedCount int) {
 		t.Logf("GCS index contents: %+v", index)
 	} else {
 		t.Logf("✅ GCS index verification passed: %d articles found", actualCount)
+		// Log actual keys to verify they're real articles
+		for key := range index {
+			t.Logf("  - Key: %s", key[:50]+"...") // Show first 50 chars of key
+		}
 	}
 }
 
@@ -423,38 +427,6 @@ func TestE2E_WebhookToSlack(t *testing.T) {
 	t.Logf("Response: %+v", result)
 }
 
-// TestE2E_AllScenarios runs all E2E scenarios in sequence
-func TestE2E_AllScenarios(t *testing.T) {
-	config := loadE2EConfig()
-	if config.GeminiAPIKey == "" || config.SlackBotToken == "" {
-		t.Skip("E2E test requires GEMINI_API_KEY and SLACK_BOT_TOKEN environment variables")
-	}
-
-	scenarios := []struct {
-		name string
-		test func(*testing.T)
-	}{
-		{"Hatena RSS to Slack", TestE2E_HatenaRSSToSlack},
-		{"Lobsters RSS to Slack", TestE2E_LobstersRSSToSlack},
-		{"Webhook to Slack", TestE2E_WebhookToSlack},
-	}
-
-	for _, scenario := range scenarios {
-		t.Run(scenario.name, func(t *testing.T) {
-			t.Logf("🚀 Running E2E scenario: %s", scenario.name)
-
-			// Add some delay between tests to avoid overwhelming services
-			if scenario.name != "Hatena RSS to Slack" {
-				time.Sleep(10 * time.Second)
-			}
-
-			scenario.test(t)
-		})
-	}
-
-	t.Logf("🎉 All E2E scenarios completed successfully!")
-}
-
 // TestE2E_ErrorHandling tests error scenarios
 func TestE2E_ErrorHandling(t *testing.T) {
 	// Test with minimal config (should still validate basic structure)
@@ -501,26 +473,4 @@ func TestE2E_ErrorHandling(t *testing.T) {
 	}
 
 	t.Logf("✅ Error handling test completed")
-}
-
-// Helper function to print E2E test setup instructions
-func TestE2E_SetupInstructions(t *testing.T) {
-	t.Logf(`
-🔧 E2E Test Setup Instructions:
-
-E2E tests will automatically use your existing environment variables:
-- GEMINI_API_KEY (or E2E_GEMINI_API_KEY for test-specific key)
-- SLACK_BOT_TOKEN (or E2E_SLACK_BOT_TOKEN for test-specific token)
-
-Run E2E tests with:
-make test-e2e
-
-The tests will:
-1. Fetch real RSS feeds (Hatena, Lobsters)
-2. Call Gemini API for summarization  
-3. Send notifications to #dev-null channel in Slack
-4. Test webhook URL processing
-
-⚠️  Make sure #dev-null channel exists in your Slack workspace!
-`)
 }
