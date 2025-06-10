@@ -102,6 +102,20 @@ generate:
 security:
 	gosec ./...
 
+# Deploy to Google Cloud Functions
+deploy:
+	gcloud run deploy article-summarizer-v3 \
+		--source . \
+		--function SummarizeArticles \
+		--base-image go121 \
+		--memory 512Mi \
+		--timeout 540s \
+		--region asia-northeast1 \
+		--service-account article-summarizer-sa@gen-lang-client-0715048106.iam.gserviceaccount.com \
+		--update-secrets "GEMINI_API_KEY=GEMINI_API_KEY:latest,SLACK_BOT_TOKEN=SLACK_BOT_TOKEN:latest,WEBHOOK_AUTH_TOKEN=WEBHOOK_AUTH_TOKEN:latest" \
+		--allow-unauthenticated \
+		--project gen-lang-client-0715048106
+
 # All checks
 check: fmt vet lint test-race security
 
@@ -124,6 +138,7 @@ help:
 	@echo "  clean       - Clean build artifacts"
 	@echo "  run         - Run server in Cloud Function mode"
 	@echo "  dev         - Run development server with hot reload"
+	@echo "  deploy      - Deploy to Google Cloud Functions"
 	@echo "  check-env   - Check required environment variables"
 	@echo "  config      - Show current configuration"
 	@echo "  fmt         - Format code"
