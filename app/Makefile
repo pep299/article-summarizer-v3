@@ -47,6 +47,15 @@ test-coverage:
 	$(GOTEST) -coverprofile=coverage.out ./...
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 
+# E2E tests (uses existing API keys)
+test-e2e:
+	@echo "🚀 Running E2E tests with existing API keys..."
+	$(GOTEST) -v ./test -run TestE2E_ -timeout 10m
+
+# E2E test setup instructions
+test-e2e-setup:
+	$(GOTEST) -v ./test -run TestE2E_SetupInstructions
+
 # Clean
 clean:
 	$(GOCLEAN)
@@ -110,6 +119,8 @@ help:
 	@echo "  test        - Run tests"
 	@echo "  test-race   - Run tests with race detection"
 	@echo "  test-coverage - Run tests with coverage report"
+	@echo "  test-e2e    - Run E2E tests (uses existing API keys)"
+	@echo "  test-e2e-setup - Show E2E test setup instructions"
 	@echo "  clean       - Clean build artifacts"
 	@echo "  run         - Run server in Cloud Function mode"
 	@echo "  dev         - Run development server with hot reload"

@@ -7,30 +7,21 @@ import (
 	"github.com/pep299/article-summarizer-v3/internal/application"
 )
 
-func TestMain(m *testing.M) {
-	// Set up test environment variables for integration tests
-	os.Setenv("GEMINI_API_KEY", "test-gemini-key")
-	os.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
-	os.Setenv("SLACK_CHANNEL", "#test-channel")
-	os.Setenv("CACHE_TYPE", "memory")
-	os.Setenv("CACHE_DURATION_HOURS", "1")
-
-	// Run tests
-	code := m.Run()
-
-	// Clean up
-	os.Unsetenv("GEMINI_API_KEY")
-	os.Unsetenv("SLACK_BOT_TOKEN")
-	os.Unsetenv("SLACK_CHANNEL")
-	os.Unsetenv("CACHE_TYPE")
-	os.Unsetenv("CACHE_DURATION_HOURS")
-
-	os.Exit(code)
-}
+// 個別のテストで環境変数を設定するため、TestMainを削除
 
 func TestIntegration_FullPipeline_MockedServices(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Ensure test environment is set up properly  
+	if os.Getenv("GEMINI_API_KEY") == "" {
+		os.Setenv("GEMINI_API_KEY", "test-gemini-key")
+		defer os.Unsetenv("GEMINI_API_KEY")
+	}
+	if os.Getenv("SLACK_BOT_TOKEN") == "" {
+		os.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+		defer os.Unsetenv("SLACK_BOT_TOKEN")
 	}
 
 	// Create application with real dependencies but test API keys
@@ -131,6 +122,16 @@ func TestIntegration_CacheManager(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	// Ensure test environment is set up properly  
+	if os.Getenv("GEMINI_API_KEY") == "" {
+		os.Setenv("GEMINI_API_KEY", "test-gemini-key")
+		defer os.Unsetenv("GEMINI_API_KEY")
+	}
+	if os.Getenv("SLACK_BOT_TOKEN") == "" {
+		os.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+		defer os.Unsetenv("SLACK_BOT_TOKEN")
+	}
+
 	app, err := application.New()
 	if err != nil {
 		t.Fatalf("Failed to create application: %v", err)
@@ -145,6 +146,16 @@ func TestIntegration_CacheManager(t *testing.T) {
 }
 
 func TestIntegration_ApplicationLifecycle(t *testing.T) {
+	// Ensure test environment is set up properly  
+	if os.Getenv("GEMINI_API_KEY") == "" {
+		os.Setenv("GEMINI_API_KEY", "test-gemini-key")
+		defer os.Unsetenv("GEMINI_API_KEY")
+	}
+	if os.Getenv("SLACK_BOT_TOKEN") == "" {
+		os.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+		defer os.Unsetenv("SLACK_BOT_TOKEN")
+	}
+
 	// Test application creation
 	app, err := application.New()
 	if err != nil {

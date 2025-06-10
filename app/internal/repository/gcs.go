@@ -37,7 +37,7 @@ type gcsRepository struct {
 	indexFile  string
 }
 
-const indexFileName = "index.json"
+const defaultIndexFileName = "index.json"
 
 // NewProcessedArticleRepository creates a new processed article repository
 func NewProcessedArticleRepository() (ProcessedArticleRepository, error) {
@@ -51,6 +51,12 @@ func NewProcessedArticleRepository() (ProcessedArticleRepository, error) {
 	bucketName := "article-summarizer-processed-articles"
 	if env := os.Getenv("CACHE_BUCKET"); env != "" {
 		bucketName = env
+	}
+
+	// Get index file name from environment (for testing)
+	indexFileName := defaultIndexFileName
+	if env := os.Getenv("CACHE_INDEX_FILE"); env != "" {
+		indexFileName = env
 	}
 
 	return &gcsRepository{

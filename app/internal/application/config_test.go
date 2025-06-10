@@ -33,12 +33,12 @@ func TestLoadConfig(t *testing.T) {
 		t.Errorf("Expected GeminiModel to be 'gemini-2.5-flash-preview-05-20', got '%s'", cfg.GeminiModel)
 	}
 
-	if cfg.SlackChannel != "#dev-null" {
-		t.Errorf("Expected SlackChannel to be '#dev-null', got '%s'", cfg.SlackChannel)
+	if cfg.SlackChannel != "#article-summarizer" {
+		t.Errorf("Expected SlackChannel to be '#article-summarizer', got '%s'", cfg.SlackChannel)
 	}
 
-	if cfg.WebhookSlackChannel != "#dev-null" {
-		t.Errorf("Expected WebhookSlackChannel to be '#dev-null', got '%s'", cfg.WebhookSlackChannel)
+	if cfg.WebhookSlackChannel != "#ondemand-article-summary" {
+		t.Errorf("Expected WebhookSlackChannel to be '#ondemand-article-summary', got '%s'", cfg.WebhookSlackChannel)
 	}
 
 	// Check RSS feeds configuration

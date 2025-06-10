@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 
 	"github.com/pep299/article-summarizer-v3/internal/repository"
 )
@@ -90,6 +92,14 @@ func (f *Feed) Process(ctx context.Context, feedName string) error {
 		}
 	}
 
+	// テスト環境での記事数制限
+	if testLimit := os.Getenv("TEST_MAX_ARTICLES"); testLimit != "" {
+		if limit, err := strconv.Atoi(testLimit); err == nil && limit > 0 && limit < len(unprocessedArticles) {
+			log.Printf("TEST_MAX_ARTICLES制限により %d件に制限", limit)
+			unprocessedArticles = unprocessedArticles[:limit]
+		}
+	}
+	
 	log.Printf("Processing %d new articles from %s", len(unprocessedArticles), displayName)
 
 	if len(unprocessedArticles) == 0 {
