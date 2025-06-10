@@ -45,3 +45,54 @@ func TestLobstersStrategy(t *testing.T) {
 		}
 	}
 }
+
+// TestLobstersStrategy_DateParsing tests Lobsters-specific date parsing
+// This tests lobsters.go:70-87 ParseDate() for RFC1123Z format handling
+func TestLobstersStrategy_DateParsing(t *testing.T) {
+	strategy := NewLobstersStrategy()
+	
+	tests := []struct {
+		name        string
+		inputDate   string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "Valid RFC1123Z",
+			inputDate:   "Mon, 15 Jan 2024 01:30:00 +0000",
+			expectError: false,
+			description: "Standard Lobsters date format should parse",
+		},
+		{
+			name:        "Invalid date",
+			inputDate:   "Not a real date", 
+			expectError: true,
+			description: "Invalid date should return error",
+		},
+		{
+			name:        "Empty date",
+			inputDate:   "",
+			expectError: true,
+			description: "Empty date should return error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parsedTime, err := strategy.ParseDate(tt.inputDate)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("%s: expected error but got none", tt.description)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("%s: unexpected error: %v", tt.description, err)
+				}
+				if parsedTime.IsZero() {
+					t.Errorf("%s: expected valid time, got zero time", tt.description)
+				}
+			}
+		})
+	}
+}

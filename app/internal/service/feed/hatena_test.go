@@ -32,3 +32,54 @@ func TestHatenaStrategy(t *testing.T) {
 		t.Errorf("Expected 3 articles after filtering, got %d", len(filtered))
 	}
 }
+
+// TestHatenaStrategy_DateParsing tests Hatena-specific date parsing
+// This tests hatena.go:51-67 ParseDate() for RFC3339 format handling
+func TestHatenaStrategy_DateParsing(t *testing.T) {
+	strategy := NewHatenaStrategy()
+	
+	tests := []struct {
+		name        string
+		inputDate   string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "Valid RFC3339",
+			inputDate:   "2024-01-15T10:30:00+09:00",
+			expectError: false,
+			description: "Standard Hatena date format should parse",
+		},
+		{
+			name:        "Invalid date",
+			inputDate:   "invalid-date",
+			expectError: true,
+			description: "Invalid date should return error",
+		},
+		{
+			name:        "Empty date",
+			inputDate:   "",
+			expectError: true,
+			description: "Empty date should return error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parsedTime, err := strategy.ParseDate(tt.inputDate)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("%s: expected error but got none", tt.description)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("%s: unexpected error: %v", tt.description, err)
+				}
+				if parsedTime.IsZero() {
+					t.Errorf("%s: expected valid time, got zero time", tt.description)
+				}
+			}
+		})
+	}
+}
