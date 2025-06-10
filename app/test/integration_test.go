@@ -14,7 +14,7 @@ func TestIntegration_FullPipeline_MockedServices(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	// Ensure test environment is set up properly  
+	// Ensure test environment is set up properly
 	if os.Getenv("GEMINI_API_KEY") == "" {
 		os.Setenv("GEMINI_API_KEY", "test-gemini-key")
 		defer os.Unsetenv("GEMINI_API_KEY")
@@ -122,7 +122,7 @@ func TestIntegration_CacheManager(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	// Ensure test environment is set up properly  
+	// Ensure test environment is set up properly
 	if os.Getenv("GEMINI_API_KEY") == "" {
 		os.Setenv("GEMINI_API_KEY", "test-gemini-key")
 		defer os.Unsetenv("GEMINI_API_KEY")
@@ -146,7 +146,7 @@ func TestIntegration_CacheManager(t *testing.T) {
 }
 
 func TestIntegration_ApplicationLifecycle(t *testing.T) {
-	// Ensure test environment is set up properly  
+	// Ensure test environment is set up properly
 	if os.Getenv("GEMINI_API_KEY") == "" {
 		os.Setenv("GEMINI_API_KEY", "test-gemini-key")
 		defer os.Unsetenv("GEMINI_API_KEY")

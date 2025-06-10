@@ -139,7 +139,7 @@ func TestGCSRepository_NormalizeURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := repo.normalizeURL(tt.input)
-			
+
 			if tt.hasError {
 				if err == nil {
 					t.Error("Expected error but got none")
@@ -168,7 +168,7 @@ func TestGCSRepository_DuplicateCheckWorkflow(t *testing.T) {
 	}
 
 	article2 := Item{
-		Title: "Test Article 2", 
+		Title: "Test Article 2",
 		Link:  "https://example.com/article/1?utm_source=twitter", // 同じ記事、異なるパラメータ
 		GUID:  "https://example.com/article/1",
 	}
@@ -221,6 +221,6 @@ func TestGCSRepository_DuplicateCheckWorkflow(t *testing.T) {
 
 	t.Logf("✅ Duplicate check workflow test passed")
 	t.Logf("Key1 (article1): %s", key1)
-	t.Logf("Key2 (article2): %s", key2) 
+	t.Logf("Key2 (article2): %s", key2)
 	t.Logf("Key3 (article3): %s", key3)
 }

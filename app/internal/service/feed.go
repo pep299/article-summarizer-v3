@@ -99,7 +99,7 @@ func (f *Feed) Process(ctx context.Context, feedName string) error {
 			unprocessedArticles = unprocessedArticles[:limit]
 		}
 	}
-	
+
 	log.Printf("Processing %d new articles from %s", len(unprocessedArticles), displayName)
 
 	if len(unprocessedArticles) == 0 {

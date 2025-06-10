@@ -2,7 +2,6 @@ package application
 
 import (
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -29,14 +28,6 @@ type Config struct {
 	// RSS settings
 	HatenaRSSURL   string `json:"hatena_rss_url"`
 	LobstersRSSURL string `json:"lobsters_rss_url"`
-}
-
-// RSSFeedConfig represents configuration for a single RSS feed
-type RSSFeedConfig struct {
-	Name     string `json:"name"`
-	URL      string `json:"url"`
-	Enabled  bool   `json:"enabled"`
-	Schedule string `json:"schedule"` // cron expression for individual scheduling
 }
 
 // Load reads configuration from environment variables and .env file
@@ -78,16 +69,6 @@ func (c *Config) validate() error {
 func getEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
-	}
-	return defaultValue
-}
-
-// getEnvOrDefaultInt returns environment variable value as int or default if not set
-func getEnvOrDefaultInt(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
-		}
 	}
 	return defaultValue
 }

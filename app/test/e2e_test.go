@@ -25,7 +25,7 @@ func loadE2EConfig() *E2ETestConfig {
 	// 確実に環境変数を読み込む（テスト実行順序の影響を回避）
 	geminiKey := os.Getenv("GEMINI_API_KEY")
 	slackToken := os.Getenv("SLACK_BOT_TOKEN")
-	
+
 	// E2E用プレフィックスがあれば優先
 	if key := os.Getenv("E2E_GEMINI_API_KEY"); key != "" {
 		geminiKey = key
@@ -33,7 +33,7 @@ func loadE2EConfig() *E2ETestConfig {
 	if token := os.Getenv("E2E_SLACK_BOT_TOKEN"); token != "" {
 		slackToken = token
 	}
-	
+
 	return &E2ETestConfig{
 		GeminiAPIKey:  geminiKey,
 		SlackBotToken: slackToken,
@@ -61,21 +61,21 @@ func setupE2EEnvironment(config *E2ETestConfig) {
 	os.Setenv("GEMINI_API_KEY", config.GeminiAPIKey)
 	os.Setenv("SLACK_BOT_TOKEN", config.SlackBotToken)
 	os.Setenv("SLACK_CHANNEL", config.SlackChannel)
-	os.Setenv("WEBHOOK_SLACK_CHANNEL", config.SlackChannel)  // 両方とも#dev-nullに
+	os.Setenv("WEBHOOK_SLACK_CHANNEL", config.SlackChannel) // 両方とも#dev-nullに
 	// テスト用のGCSバケット設定
 	os.Setenv("CACHE_BUCKET", "article-summarizer-processed-articles")
-	os.Setenv("CACHE_INDEX_FILE", "tmp-index-test.json")  // 一時テスト用インデックス
+	os.Setenv("CACHE_INDEX_FILE", "tmp-index-test.json") // 一時テスト用インデックス
 	os.Setenv("CACHE_TYPE", "memory")
 	os.Setenv("CACHE_DURATION_HOURS", "1")
 	// テスト用の処理件数制限
-	os.Setenv("TEST_MAX_ARTICLES", "2")  // テストでは2件だけ処理
+	os.Setenv("TEST_MAX_ARTICLES", "2") // テストでは2件だけ処理
 }
 
 func cleanupE2EEnvironment() {
 	// 本番環境変数はUnsetしない（他のテストで使うため）
 	// os.Unsetenv("GEMINI_API_KEY")
 	// os.Unsetenv("SLACK_BOT_TOKEN")
-	
+
 	// テスト固有の設定のみクリア
 	os.Unsetenv("SLACK_CHANNEL")
 	os.Unsetenv("WEBHOOK_SLACK_CHANNEL")
@@ -107,12 +107,12 @@ func setupTestGCSIndex(t *testing.T) {
 
 	writer := obj.NewWriter(ctx)
 	writer.ContentType = "application/json"
-	
+
 	if _, err := writer.Write(data); err != nil {
 		writer.Close()
 		t.Fatalf("Failed to write test index: %v", err)
 	}
-	
+
 	if err := writer.Close(); err != nil {
 		t.Fatalf("Failed to close GCS writer: %v", err)
 	}
@@ -181,8 +181,8 @@ func TestE2E_HatenaRSSToSlack(t *testing.T) {
 	t.Logf("DEBUG: Direct ENV SLACK_BOT_TOKEN: %s", os.Getenv("SLACK_BOT_TOKEN")[:15])
 	t.Logf("DEBUG: getAPIKey(): %s", getAPIKey()[:10])
 	t.Logf("DEBUG: getSlackToken(): %s", getSlackToken()[:15])
-	
-	config := loadE2EConfig()	
+
+	config := loadE2EConfig()
 	t.Logf("DEBUG: config.GeminiAPIKey: %s", config.GeminiAPIKey)
 	t.Logf("DEBUG: config.SlackBotToken: %s", config.SlackBotToken)
 
@@ -262,7 +262,7 @@ func TestE2E_HatenaRSSToSlack(t *testing.T) {
 func TestE2E_LobstersRSSToSlack(t *testing.T) {
 	t.Logf("DEBUG: Direct ENV GEMINI_API_KEY: %s", os.Getenv("GEMINI_API_KEY")[:10])
 	t.Logf("DEBUG: Direct ENV SLACK_BOT_TOKEN: %s", os.Getenv("SLACK_BOT_TOKEN")[:15])
-	
+
 	config := loadE2EConfig()
 	t.Logf("DEBUG: config.GeminiAPIKey: %s", config.GeminiAPIKey)
 	t.Logf("DEBUG: config.SlackBotToken: %s", config.SlackBotToken)
@@ -343,7 +343,7 @@ func TestE2E_LobstersRSSToSlack(t *testing.T) {
 func TestE2E_WebhookToSlack(t *testing.T) {
 	t.Logf("DEBUG: Direct ENV GEMINI_API_KEY: %s", os.Getenv("GEMINI_API_KEY")[:10])
 	t.Logf("DEBUG: Direct ENV SLACK_BOT_TOKEN: %s", os.Getenv("SLACK_BOT_TOKEN")[:15])
-	
+
 	config := loadE2EConfig()
 	t.Logf("DEBUG: config.GeminiAPIKey: %s", config.GeminiAPIKey)
 	t.Logf("DEBUG: config.SlackBotToken: %s", config.SlackBotToken)
@@ -374,7 +374,7 @@ func TestE2E_WebhookToSlack(t *testing.T) {
 
 	// Test webhook with a simple, fast URL
 	testURL := "https://example.com"
-	
+
 	requestBody := map[string]string{
 		"url": testURL,
 	}
@@ -442,12 +442,12 @@ func TestE2E_AllScenarios(t *testing.T) {
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
 			t.Logf("🚀 Running E2E scenario: %s", scenario.name)
-			
+
 			// Add some delay between tests to avoid overwhelming services
 			if scenario.name != "Hatena RSS to Slack" {
 				time.Sleep(10 * time.Second)
 			}
-			
+
 			scenario.test(t)
 		})
 	}

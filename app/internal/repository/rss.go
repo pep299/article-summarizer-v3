@@ -29,16 +29,6 @@ func (i *Item) GetUniqueID() string {
 	return i.Link
 }
 
-// Implement cache.RSSItem interface
-func (i *Item) GetTitle() string         { return i.Title }
-func (i *Item) GetLink() string          { return i.Link }
-func (i *Item) GetDescription() string   { return i.Description }
-func (i *Item) GetPubDate() string       { return i.PubDate }
-func (i *Item) GetGUID() string          { return i.GUID }
-func (i *Item) GetCategory() []string    { return i.Category }
-func (i *Item) GetSource() string        { return i.Source }
-func (i *Item) GetParsedDate() time.Time { return i.ParsedDate }
-
 type RSSRepository interface {
 	FetchFeed(ctx context.Context, feedName, url string) ([]Item, error)
 	GetUniqueItems(items []Item) []Item
@@ -124,48 +114,6 @@ func (r *rssRepository) parseRSSXML(xmlContent string) ([]Item, error) {
 	}
 
 	return nil, fmt.Errorf("unable to parse RSS format")
-}
-
-// GetUniqueItems removes duplicate items based on GUID or link
-func GetUniqueItems(items []Item) []Item {
-	seen := make(map[string]bool)
-	var unique []Item
-
-	for _, item := range items {
-		key := item.GUID
-		if key == "" {
-			key = item.Link
-		}
-
-		if key != "" && !seen[key] {
-			seen[key] = true
-			unique = append(unique, item)
-		}
-	}
-
-	return unique
-}
-
-// FilterItems filters RSS items (only removes "ask" category)
-func FilterItems(items []Item) []Item {
-	var filtered []Item
-
-	for _, item := range items {
-		// Only filter out "ask" category
-		shouldInclude := true
-		for _, category := range item.Category {
-			if strings.EqualFold(category, "ask") {
-				shouldInclude = false
-				break
-			}
-		}
-
-		if shouldInclude {
-			filtered = append(filtered, item)
-		}
-	}
-
-	return filtered
 }
 
 func parseRSSDate(dateStr string) (time.Time, error) {
