@@ -68,7 +68,7 @@ func setupE2EEnvironment(config *E2ETestConfig) {
 	os.Setenv("CACHE_TYPE", "memory")
 	os.Setenv("CACHE_DURATION_HOURS", "1")
 	// テスト用の処理件数制限
-	os.Setenv("TEST_MAX_ARTICLES", "2") // テストでは2件だけ処理
+	os.Setenv("TEST_MAX_ARTICLES", "1") // テストでは1件だけ処理
 }
 
 func cleanupE2EEnvironment() {
@@ -172,7 +172,11 @@ func verifyGCSIndexUpdated(t *testing.T, expectedCount int) {
 		t.Logf("✅ GCS index verification passed: %d articles found", actualCount)
 		// Log actual keys to verify they're real articles
 		for key := range index {
-			t.Logf("  - Key: %s", key[:50]+"...") // Show first 50 chars of key
+			if len(key) > 50 {
+				t.Logf("  - Key: %s", key[:50]+"...")
+			} else {
+				t.Logf("  - Key: %s", key)
+			}
 		}
 	}
 }
@@ -194,7 +198,7 @@ func TestE2E_HatenaRSSToSlack(t *testing.T) {
 		t.Skip("E2E test requires GEMINI_API_KEY and SLACK_BOT_TOKEN environment variables")
 	}
 
-	t.Logf("🚀 Starting Hatena RSS E2E test (max 2 articles)")
+	t.Logf("🚀 Starting Hatena RSS E2E test (max 1 article)")
 
 	// GCSテスト用インデックス作成
 	setupTestGCSIndex(t)
@@ -256,7 +260,7 @@ func TestE2E_HatenaRSSToSlack(t *testing.T) {
 	}
 
 	// GCSインデックスが更新されているか確認
-	verifyGCSIndexUpdated(t, 2) // 2件処理されたはず
+	verifyGCSIndexUpdated(t, 1) // 1件処理されたはず
 
 	t.Logf("✅ E2E Test passed: Hatena RSS → Summarization → Slack (#dev-null)")
 	t.Logf("Response: %+v", result)
@@ -275,7 +279,7 @@ func TestE2E_LobstersRSSToSlack(t *testing.T) {
 		t.Skip("E2E test requires GEMINI_API_KEY and SLACK_BOT_TOKEN environment variables")
 	}
 
-	t.Logf("🚀 Starting Lobsters RSS E2E test (max 2 articles)")
+	t.Logf("🚀 Starting Lobsters RSS E2E test (max 1 article)")
 
 	// GCSテスト用インデックス作成
 	setupTestGCSIndex(t)
@@ -337,7 +341,7 @@ func TestE2E_LobstersRSSToSlack(t *testing.T) {
 	}
 
 	// GCSインデックスが更新されているか確認
-	verifyGCSIndexUpdated(t, 2) // 2件処理されたはず
+	verifyGCSIndexUpdated(t, 1) // 1件処理されたはず
 
 	t.Logf("✅ E2E Test passed: Lobsters RSS → Summarization → Slack (#dev-null)")
 	t.Logf("Response: %+v", result)

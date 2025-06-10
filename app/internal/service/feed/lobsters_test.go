@@ -50,7 +50,7 @@ func TestLobstersStrategy(t *testing.T) {
 // This tests lobsters.go:70-87 ParseDate() for RFC1123Z format handling
 func TestLobstersStrategy_DateParsing(t *testing.T) {
 	strategy := NewLobstersStrategy()
-	
+
 	tests := []struct {
 		name        string
 		inputDate   string
@@ -65,7 +65,7 @@ func TestLobstersStrategy_DateParsing(t *testing.T) {
 		},
 		{
 			name:        "Invalid date",
-			inputDate:   "Not a real date", 
+			inputDate:   "Not a real date",
 			expectError: true,
 			description: "Invalid date should return error",
 		},

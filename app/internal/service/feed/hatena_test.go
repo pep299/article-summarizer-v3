@@ -37,7 +37,7 @@ func TestHatenaStrategy(t *testing.T) {
 // This tests hatena.go:51-67 ParseDate() for RFC3339 format handling
 func TestHatenaStrategy_DateParsing(t *testing.T) {
 	strategy := NewHatenaStrategy()
-	
+
 	tests := []struct {
 		name        string
 		inputDate   string
