@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"strconv"
 
 	"github.com/pep299/article-summarizer-v3/internal/repository"
 	"github.com/pep299/article-summarizer-v3/internal/service/feed"
+	"github.com/pep299/article-summarizer-v3/internal/service/limiter"
 )
 
 type Feed struct {
@@ -17,6 +16,7 @@ type Feed struct {
 	gemini    repository.GeminiRepository
 	slack     repository.SlackRepository
 	registry  *feed.FeedRegistry
+	limiter   limiter.ArticleLimiter
 }
 
 func NewFeed(
@@ -24,6 +24,7 @@ func NewFeed(
 	processed repository.ProcessedArticleRepository,
 	gemini repository.GeminiRepository,
 	slack repository.SlackRepository,
+	limiter limiter.ArticleLimiter,
 ) *Feed {
 	// Initialize feed registry and register all default strategies
 	registry := feed.NewFeedRegistry()
@@ -39,6 +40,7 @@ func NewFeed(
 		gemini:    gemini,
 		slack:     slack,
 		registry:  registry,
+		limiter:   limiter,
 	}
 }
 
@@ -121,13 +123,8 @@ func (f *Feed) selectUnprocessedArticles(articles []repository.Item, processedIn
 		}
 	}
 
-	// Apply test environment article limit
-	if testLimit := os.Getenv("TEST_MAX_ARTICLES"); testLimit != "" {
-		if limit, err := strconv.Atoi(testLimit); err == nil && limit > 0 && limit < len(unprocessedArticles) {
-			log.Printf("TEST_MAX_ARTICLES制限により %d件に制限", limit)
-			unprocessedArticles = unprocessedArticles[:limit]
-		}
-	}
+	// Apply article limiting
+	unprocessedArticles = f.limiter.Limit(unprocessedArticles)
 
 	log.Printf("Processing %d new articles from %s", len(unprocessedArticles), displayName)
 	return unprocessedArticles

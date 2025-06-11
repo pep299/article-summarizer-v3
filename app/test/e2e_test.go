@@ -12,6 +12,10 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/pep299/article-summarizer-v3/internal/application"
+	"github.com/pep299/article-summarizer-v3/internal/repository"
+	"github.com/pep299/article-summarizer-v3/internal/service"
+	"github.com/pep299/article-summarizer-v3/internal/service/limiter"
+	"github.com/pep299/article-summarizer-v3/internal/transport/handler"
 )
 
 // E2ETestConfig holds test configuration
@@ -67,8 +71,6 @@ func setupE2EEnvironment(config *E2ETestConfig) {
 	os.Setenv("CACHE_INDEX_FILE", "tmp-index-test.json") // 一時テスト用インデックス
 	os.Setenv("CACHE_TYPE", "memory")
 	os.Setenv("CACHE_DURATION_HOURS", "1")
-	// テスト用の処理件数制限
-	os.Setenv("TEST_MAX_ARTICLES", "1") // テストでは1件だけ処理
 }
 
 func cleanupE2EEnvironment() {
@@ -83,7 +85,39 @@ func cleanupE2EEnvironment() {
 	os.Unsetenv("CACHE_INDEX_FILE")
 	os.Unsetenv("CACHE_TYPE")
 	os.Unsetenv("CACHE_DURATION_HOURS")
-	os.Unsetenv("TEST_MAX_ARTICLES")
+}
+
+// createTestApplication creates application with test article limiter
+func createTestApplication() (*application.Application, *handler.Process, error) {
+	// Load configuration
+	cfg, err := application.Load()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Create repositories
+	rssRepo := repository.NewRSSRepository()
+	geminiRepo := repository.NewGeminiRepository(cfg.GeminiAPIKey, cfg.GeminiModel)
+	processedRepo, err := repository.NewProcessedArticleRepository()
+	if err != nil {
+		return nil, nil, err
+	}
+	slackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannel)
+
+	// Create services with test limiter
+	testLimiter := limiter.NewTestArticleLimiter()
+	feedService := service.NewFeed(rssRepo, processedRepo, geminiRepo, slackRepo, testLimiter)
+
+	// Create handlers
+	processHandler := handler.NewProcess(feedService)
+
+	// Create mock application for cleanup
+	app := &application.Application{
+		Config:         cfg,
+		ProcessHandler: processHandler,
+	}
+
+	return app, processHandler, nil
 }
 
 // GCSヘルパー関数
@@ -207,15 +241,15 @@ func TestE2E_HatenaRSSToSlack(t *testing.T) {
 	setupE2EEnvironment(config)
 	defer cleanupE2EEnvironment()
 
-	// Create application
-	app, err := application.New()
+	// Create application with test limiter
+	app, processHandler, err := createTestApplication()
 	if err != nil {
-		t.Fatalf("Failed to create application: %v", err)
+		t.Fatalf("Failed to create test application: %v", err)
 	}
 	defer app.Close()
 
 	// Create test server
-	server := httptest.NewServer(app.ProcessHandler)
+	server := httptest.NewServer(processHandler)
 	defer server.Close()
 
 	// Test Hatena RSS processing
@@ -288,15 +322,15 @@ func TestE2E_LobstersRSSToSlack(t *testing.T) {
 	setupE2EEnvironment(config)
 	defer cleanupE2EEnvironment()
 
-	// Create application
-	app, err := application.New()
+	// Create application with test limiter
+	app, processHandler, err := createTestApplication()
 	if err != nil {
-		t.Fatalf("Failed to create application: %v", err)
+		t.Fatalf("Failed to create test application: %v", err)
 	}
 	defer app.Close()
 
 	// Create test server
-	server := httptest.NewServer(app.ProcessHandler)
+	server := httptest.NewServer(processHandler)
 	defer server.Close()
 
 	// Test Lobsters RSS processing

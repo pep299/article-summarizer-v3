@@ -5,6 +5,7 @@ import (
 
 	"github.com/pep299/article-summarizer-v3/internal/repository"
 	"github.com/pep299/article-summarizer-v3/internal/service"
+	"github.com/pep299/article-summarizer-v3/internal/service/limiter"
 	"github.com/pep299/article-summarizer-v3/internal/transport/handler"
 )
 
@@ -34,8 +35,9 @@ func New() (*Application, error) {
 	slackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannel)
 	webhookSlackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.WebhookSlackChannel)
 
-	// Create services (business logic)
-	feedService := service.NewFeed(rssRepo, processedRepo, geminiRepo, slackRepo)
+	// Create services (business logic) - use production limiter by default
+	articleLimiter := limiter.NewProductionArticleLimiter()
+	feedService := service.NewFeed(rssRepo, processedRepo, geminiRepo, slackRepo, articleLimiter)
 	urlService := service.NewURL(geminiRepo, webhookSlackRepo)
 
 	// Create handlers (HTTP layer)
