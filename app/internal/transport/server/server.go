@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/pep299/article-summarizer-v3/internal/application"
 	"github.com/pep299/article-summarizer-v3/internal/transport/middleware"
@@ -13,6 +14,7 @@ func CreateHandler() (http.Handler, func(), error) {
 	// Create application (handles all DI and business logic)
 	app, err := application.New()
 	if err != nil {
+		log.Printf("Error creating application: %v\nStack:\n%s", err, debug.Stack())
 		return nil, nil, err
 	}
 
@@ -37,7 +39,7 @@ func CreateHandler() (http.Handler, func(), error) {
 func HandleRequest(w http.ResponseWriter, r *http.Request) {
 	handler, cleanup, err := CreateHandler()
 	if err != nil {
-		log.Printf("Failed to create handler: %v", err)
+		log.Printf("Failed to create handler: %v\nStack:\n%s", err, debug.Stack())
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

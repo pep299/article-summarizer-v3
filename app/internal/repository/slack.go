@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"runtime/debug"
 	"time"
 )
 
@@ -38,7 +40,11 @@ func NewSlackRepository(botToken, channel string) SlackRepository {
 
 func (s *slackRepository) SendArticleSummary(ctx context.Context, summary ArticleSummary) error {
 	message := s.formatRSSMessage(summary)
-	return s.sendMessage(ctx, message, s.channel)
+	if err := s.sendMessage(ctx, message, s.channel); err != nil {
+		log.Printf("Error sending RSS article summary to Slack: %v\nStack:\n%s", err, debug.Stack())
+		return err
+	}
+	return nil
 }
 
 func (s *slackRepository) formatRSSMessage(summary ArticleSummary) string {
@@ -77,11 +83,13 @@ func (s *slackRepository) sendMessage(ctx context.Context, message, channel stri
 
 	body, err := json.Marshal(req)
 	if err != nil {
+		log.Printf("Error marshaling Slack request: %v\nStack:\n%s", err, debug.Stack())
 		return fmt.Errorf("marshaling request: %w", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", "https://slack.com/api/chat.postMessage", bytes.NewReader(body))
 	if err != nil {
+		log.Printf("Error creating Slack HTTP request: %v\nStack:\n%s", err, debug.Stack())
 		return fmt.Errorf("creating request: %w", err)
 	}
 
@@ -90,6 +98,7 @@ func (s *slackRepository) sendMessage(ctx context.Context, message, channel stri
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
+		log.Printf("Error sending request to Slack API: %v\nStack:\n%s", err, debug.Stack())
 		return fmt.Errorf("sending request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -108,7 +117,11 @@ func (s *slackRepository) SendOnDemandSummary(ctx context.Context, article Item,
 	if channel == "" {
 		channel = s.channel
 	}
-	return s.sendMessage(ctx, message, channel)
+	if err := s.sendMessage(ctx, message, channel); err != nil {
+		log.Printf("Error sending on-demand summary to Slack: %v\nStack:\n%s", err, debug.Stack())
+		return err
+	}
+	return nil
 }
 
 func (s *slackRepository) formatOnDemandMessage(article Item, summary SummarizeResponse) string {

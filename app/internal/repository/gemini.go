@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -45,6 +47,7 @@ func (g *geminiRepository) SummarizeURL(ctx context.Context, url string) (*Summa
 	// Fetch HTML content
 	htmlContent, err := g.fetchHTML(ctx, url)
 	if err != nil {
+		log.Printf("Error fetching HTML from URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return nil, fmt.Errorf("fetching HTML: %w", err)
 	}
 
@@ -60,6 +63,7 @@ func (g *geminiRepository) SummarizeURL(ctx context.Context, url string) (*Summa
 	// Call Gemini API
 	summary, err := g.callGeminiAPI(ctx, prompt)
 	if err != nil {
+		log.Printf("Error calling Gemini API for URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return nil, err
 	}
 
@@ -79,6 +83,7 @@ func (g *geminiRepository) fetchHTML(ctx context.Context, url string) (string, e
 
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
+		log.Printf("Error making HTTP request to URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return "", fmt.Errorf("fetching URL: %w", err)
 	}
 	defer resp.Body.Close()
@@ -89,6 +94,7 @@ func (g *geminiRepository) fetchHTML(ctx context.Context, url string) (string, e
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		log.Printf("Error reading response body from URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return "", fmt.Errorf("reading response body: %w", err)
 	}
 
@@ -184,11 +190,13 @@ func (g *geminiRepository) callGeminiAPI(ctx context.Context, prompt string) (st
 
 	body, err := json.Marshal(geminiReq)
 	if err != nil {
+		log.Printf("Error marshaling Gemini request: %v\nStack:\n%s", err, debug.Stack())
 		return "", fmt.Errorf("marshaling request: %w", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
+		log.Printf("Error creating Gemini API request: %v\nStack:\n%s", err, debug.Stack())
 		return "", fmt.Errorf("creating request: %w", err)
 	}
 
@@ -196,6 +204,7 @@ func (g *geminiRepository) callGeminiAPI(ctx context.Context, prompt string) (st
 
 	resp, err := g.httpClient.Do(httpReq)
 	if err != nil {
+		log.Printf("Error sending request to Gemini API: %v\nStack:\n%s", err, debug.Stack())
 		return "", fmt.Errorf("sending request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -207,6 +216,7 @@ func (g *geminiRepository) callGeminiAPI(ctx context.Context, prompt string) (st
 
 	var geminiResp geminiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
+		log.Printf("Error decoding Gemini API response: %v\nStack:\n%s", err, debug.Stack())
 		return "", fmt.Errorf("decoding response: %w", err)
 	}
 
@@ -221,6 +231,7 @@ func (g *geminiRepository) SummarizeURLForOnDemand(ctx context.Context, url stri
 	// Fetch HTML content
 	htmlContent, err := g.fetchHTML(ctx, url)
 	if err != nil {
+		log.Printf("Error fetching HTML for on-demand from URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return nil, fmt.Errorf("fetching HTML: %w", err)
 	}
 
@@ -236,6 +247,7 @@ func (g *geminiRepository) SummarizeURLForOnDemand(ctx context.Context, url stri
 	// Call Gemini API
 	summary, err := g.callGeminiAPI(ctx, prompt)
 	if err != nil {
+		log.Printf("Error calling Gemini API for on-demand URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return nil, err
 	}
 

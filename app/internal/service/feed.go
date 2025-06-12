@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"runtime/debug"
 
 	"github.com/pep299/article-summarizer-v3/internal/repository"
 	"github.com/pep299/article-summarizer-v3/internal/service/feed"
@@ -52,11 +53,13 @@ func (f *Feed) Process(ctx context.Context, feedName string) error {
 
 	processedIndex, err := f.processed.LoadIndex(ctx)
 	if err != nil {
+		log.Printf("Error loading processed articles index for feed %s: %v\nStack:\n%s", feedName, err, debug.Stack())
 		return fmt.Errorf("loading processed articles index: %w", err)
 	}
 
 	articles, err := f.fetchAndPrepareArticles(ctx, strategy, feedName)
 	if err != nil {
+		log.Printf("Error fetching articles for feed %s: %v\nStack:\n%s", feedName, err, debug.Stack())
 		return err
 	}
 
@@ -71,7 +74,11 @@ func (f *Feed) Process(ctx context.Context, feedName string) error {
 		return nil
 	}
 
-	return f.processArticles(ctx, unprocessedArticles, strategy.GetConfig().DisplayName)
+	if err := f.processArticles(ctx, unprocessedArticles, strategy.GetConfig().DisplayName); err != nil {
+		log.Printf("Error processing articles for feed %s: %v\nStack:\n%s", feedName, err, debug.Stack())
+		return err
+	}
+	return nil
 }
 
 // fetchAndPrepareArticles handles RSS fetching, parsing, and basic preparation
@@ -83,12 +90,14 @@ func (f *Feed) fetchAndPrepareArticles(ctx context.Context, strategy feed.FeedSt
 	headers := strategy.GetRequestHeaders()
 	xmlContent, err := f.rss.FetchFeedXML(ctx, config.URL, headers)
 	if err != nil {
+		log.Printf("Error fetching RSS XML for feed %s: %v\nStack:\n%s", feedName, err, debug.Stack())
 		return nil, fmt.Errorf("fetching RSS feed %s: %w", feedName, err)
 	}
 
 	// Parse XML using strategy-specific parser
 	articles, err := strategy.ParseFeed(xmlContent)
 	if err != nil {
+		log.Printf("Error parsing RSS feed %s: %v\nStack:\n%s", feedName, err, debug.Stack())
 		return nil, fmt.Errorf("parsing RSS feed %s: %w", feedName, err)
 	}
 
@@ -134,6 +143,7 @@ func (f *Feed) selectUnprocessedArticles(articles []repository.Item, processedIn
 func (f *Feed) processArticles(ctx context.Context, articles []repository.Item, displayName string) error {
 	for _, article := range articles {
 		if err := f.processArticle(ctx, article); err != nil {
+			log.Printf("Error processing article %s: %v\nStack:\n%s", article.Title, err, debug.Stack())
 			return fmt.Errorf("processing article %s: %w", article.Title, err)
 		}
 	}
@@ -147,6 +157,7 @@ func (f *Feed) processArticle(ctx context.Context, article repository.Item) erro
 
 	summary, err := f.gemini.SummarizeURL(ctx, article.Link)
 	if err != nil {
+		log.Printf("Error summarizing article %s: %v\nStack:\n%s", article.Title, err, debug.Stack())
 		return fmt.Errorf("summarizing article: %w", err)
 	}
 
@@ -156,11 +167,13 @@ func (f *Feed) processArticle(ctx context.Context, article repository.Item) erro
 	}
 
 	if err := f.slack.SendArticleSummary(ctx, articleSummary); err != nil {
+		log.Printf("Error sending Slack notification for article %s: %v\nStack:\n%s", article.Title, err, debug.Stack())
 		return fmt.Errorf("sending Slack notification: %w", err)
 	}
 
 	// Mark as processed (includes GCS re-fetch and update)
 	if err := f.processed.MarkAsProcessed(ctx, article); err != nil {
+		log.Printf("Error marking article as processed %s: %v\nStack:\n%s", article.Title, err, debug.Stack())
 		return fmt.Errorf("marking as processed: %w", err)
 	}
 

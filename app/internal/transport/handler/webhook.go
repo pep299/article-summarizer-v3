@@ -2,7 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/pep299/article-summarizer-v3/internal/service"
 	"github.com/pep299/article-summarizer-v3/internal/transport/response"
@@ -35,6 +37,7 @@ func (h *Webhook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.urlService.Process(r.Context(), req.URL); err != nil {
+		log.Printf("Error processing URL %s: %v\nStack:\n%s", req.URL, err, debug.Stack())
 		response.WriteInternalError(w, err.Error())
 		return
 	}

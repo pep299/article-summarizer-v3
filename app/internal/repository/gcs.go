@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -76,17 +78,20 @@ func (g *gcsRepository) LoadIndex(ctx context.Context) (map[string]*IndexEntry, 
 			// Index doesn't exist yet, return empty index
 			return make(map[string]*IndexEntry), nil
 		}
+		log.Printf("Error opening GCS index reader: %v\nStack:\n%s", err, debug.Stack())
 		return nil, fmt.Errorf("opening index reader: %w", err)
 	}
 	defer reader.Close()
 
 	data, err := io.ReadAll(reader)
 	if err != nil {
+		log.Printf("Error reading GCS index data: %v\nStack:\n%s", err, debug.Stack())
 		return nil, fmt.Errorf("reading index data: %w", err)
 	}
 
 	var index map[string]*IndexEntry
 	if err := json.Unmarshal(data, &index); err != nil {
+		log.Printf("Error unmarshaling GCS index: %v\nStack:\n%s", err, debug.Stack())
 		return nil, fmt.Errorf("unmarshaling index: %w", err)
 	}
 
@@ -97,6 +102,7 @@ func (g *gcsRepository) LoadIndex(ctx context.Context) (map[string]*IndexEntry, 
 func (g *gcsRepository) saveIndex(ctx context.Context, index map[string]*IndexEntry) error {
 	data, err := json.Marshal(index)
 	if err != nil {
+		log.Printf("Error marshaling GCS index: %v\nStack:\n%s", err, debug.Stack())
 		return fmt.Errorf("marshaling index: %w", err)
 	}
 
@@ -106,10 +112,12 @@ func (g *gcsRepository) saveIndex(ctx context.Context, index map[string]*IndexEn
 
 	if _, err := writer.Write(data); err != nil {
 		writer.Close()
+		log.Printf("Error writing GCS index data: %v\nStack:\n%s", err, debug.Stack())
 		return fmt.Errorf("writing index data: %w", err)
 	}
 
 	if err := writer.Close(); err != nil {
+		log.Printf("Error closing GCS index writer: %v\nStack:\n%s", err, debug.Stack())
 		return fmt.Errorf("closing index writer: %w", err)
 	}
 
@@ -127,6 +135,7 @@ func (g *gcsRepository) MarkAsProcessed(ctx context.Context, article Item) error
 	// 1. Load latest index from GCS (to handle concurrent updates)
 	index, err := g.LoadIndex(ctx)
 	if err != nil {
+		log.Printf("Error loading latest GCS index for marking processed: %v\nStack:\n%s", err, debug.Stack())
 		return fmt.Errorf("loading latest index: %w", err)
 	}
 
@@ -141,7 +150,11 @@ func (g *gcsRepository) MarkAsProcessed(ctx context.Context, article Item) error
 	}
 
 	// 3. Save updated index to GCS
-	return g.saveIndex(ctx, index)
+	if err := g.saveIndex(ctx, index); err != nil {
+		log.Printf("Error saving GCS index after marking processed: %v\nStack:\n%s", err, debug.Stack())
+		return err
+	}
+	return nil
 }
 
 // GenerateKey generates a key for an article

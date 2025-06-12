@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log"
+	"runtime/debug"
 	"time"
 
 	"github.com/pep299/article-summarizer-v3/internal/repository"
@@ -29,6 +30,7 @@ func (u *URL) Process(ctx context.Context, url string) error {
 
 	summary, err := u.gemini.SummarizeURLForOnDemand(ctx, url)
 	if err != nil {
+		log.Printf("Error summarizing URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return err
 	}
 
@@ -42,6 +44,7 @@ func (u *URL) Process(ctx context.Context, url string) error {
 	// Note: The targetChannel should be passed from the application layer
 	// For now, using the default channel of the slack repository
 	if err := u.slack.SendOnDemandSummary(ctx, article, *summary, ""); err != nil {
+		log.Printf("Error sending on-demand Slack summary for URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return err
 	}
 
