@@ -1,6 +1,6 @@
 module github.com/pep299/article-summarizer-v3
 
-go 1.21
+go 1.23
 
 require (
 	cloud.google.com/go/storage v1.36.0
