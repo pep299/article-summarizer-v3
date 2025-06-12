@@ -74,7 +74,7 @@ sequenceDiagram
 
 ## 🛠️ 技術スタック
 
-- **言語**: Go 1.21+
+- **言語**: Go 1.23+
 - **実行環境**: Google Cloud Functions
 - **データ保存**: Cloud Storage (JSON)
 - **RSS**: はてなブックマーク、Lobsters

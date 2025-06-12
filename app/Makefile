@@ -9,6 +9,10 @@ GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
 GOFMT=$(GOCMD) fmt
 
+# Version parameters
+GO_VERSION := $(shell grep "^go " go.mod | cut -d' ' -f2)
+GO_RUNTIME_ID := go$(shell echo $(GO_VERSION) | tr -d '.')
+
 # Build targets
 BUILD_DIR=../build
 CLI_BINARY=$(BUILD_DIR)/cli
@@ -107,7 +111,7 @@ deploy:
 	gcloud run deploy article-summarizer-v3 \
 		--source . \
 		--function SummarizeArticles \
-		--base-image go121 \
+		--base-image $(GO_RUNTIME_ID) \
 		--memory 512Mi \
 		--timeout 540s \
 		--region asia-northeast1 \
