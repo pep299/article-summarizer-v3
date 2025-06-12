@@ -3,8 +3,6 @@ package application
 import (
 	"os"
 	"strings"
-
-	"github.com/joho/godotenv"
 )
 
 // Config holds all configuration for the application
@@ -26,10 +24,8 @@ type Config struct {
 	WebhookAuthToken string `json:"-"` // Don't expose in JSON
 }
 
-// Load reads configuration from environment variables and .env file
+// Load reads configuration from environment variables
 func Load() (*Config, error) {
-	// Load .env file if exists
-	_ = godotenv.Load()
 
 	config := &Config{
 		Port:                "8080",
