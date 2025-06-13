@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"runtime/debug"
@@ -25,6 +26,7 @@ func CreateHandler() (http.Handler, func(), error) {
 	mux := http.NewServeMux()
 	mux.Handle("/process", authMiddleware(app.ProcessHandler))
 	mux.Handle("/webhook", authMiddleware(app.WebhookHandler))
+	mux.HandleFunc("/hc", healthCheck)                  // Health check endpoint
 	mux.Handle("/", authMiddleware(app.ProcessHandler)) // Default to process
 
 	// Return handler and cleanup function
@@ -46,4 +48,13 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 	defer cleanup()
 
 	handler.ServeHTTP(w, r)
+}
+
+// healthCheck handles health check requests
+func healthCheck(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]string{
+		"status": "ok",
+	}
+	json.NewEncoder(w).Encode(response)
 }
