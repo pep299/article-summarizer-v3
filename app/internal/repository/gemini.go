@@ -12,6 +12,8 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
 )
 
 // SummarizeResponse represents a summarization response
@@ -44,28 +46,45 @@ func NewGeminiRepository(apiKey, model string) GeminiRepository {
 }
 
 func (g *geminiRepository) SummarizeURL(ctx context.Context, url string) (*SummarizeResponse, error) {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
+	start := time.Now()
+
+	logger.Printf("HTML fetch started url=%s", url)
 	// Fetch HTML content
 	htmlContent, err := g.fetchHTML(ctx, url)
 	if err != nil {
-		log.Printf("Error fetching HTML from URL %s: %v\nStack:\n%s", url, err, debug.Stack())
+		logger.Printf("Error fetching HTML from URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return nil, fmt.Errorf("fetching HTML: %w", err)
 	}
+
+	fetchDuration := time.Since(start)
+	logger.Printf("HTML fetch completed url=%s content_length=%d duration_ms=%d", url, len(htmlContent), fetchDuration.Milliseconds())
 
 	// Extract text from HTML
 	textContent := g.extractTextFromHTML(htmlContent)
 	if textContent == "" {
+		logger.Printf("No text content found url=%s", url)
 		return nil, fmt.Errorf("no text content found")
 	}
+
+	logger.Printf("Text extraction completed url=%s text_length=%d", url, len(textContent))
 
 	// Create prompt for RSS mode (shorter summary for team sharing)
 	prompt := g.buildRSSPrompt(textContent)
 
 	// Call Gemini API
+	geminiStart := time.Now()
+	logger.Printf("Gemini API call started url=%s", url)
 	summary, err := g.callGeminiAPI(ctx, prompt)
 	if err != nil {
-		log.Printf("Error calling Gemini API for URL %s: %v\nStack:\n%s", url, err, debug.Stack())
+		logger.Printf("Error calling Gemini API for URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return nil, err
 	}
+
+	geminiDuration := time.Since(geminiStart)
+	totalDuration := time.Since(start)
+	logger.Printf("Gemini API completed url=%s summary_length=%d gemini_duration_ms=%d total_duration_ms=%d",
+		url, len(summary), geminiDuration.Milliseconds(), totalDuration.Milliseconds())
 
 	return &SummarizeResponse{
 		Summary:     summary,
@@ -74,8 +93,11 @@ func (g *geminiRepository) SummarizeURL(ctx context.Context, url string) (*Summa
 }
 
 func (g *geminiRepository) fetchHTML(ctx context.Context, url string) (string, error) {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
+		logger.Printf("Error creating HTTP request url=%s error=%v\nStack:\n%s", url, err, debug.Stack())
 		return "", fmt.Errorf("creating request: %w", err)
 	}
 
@@ -83,18 +105,19 @@ func (g *geminiRepository) fetchHTML(ctx context.Context, url string) (string, e
 
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		log.Printf("Error making HTTP request to URL %s: %v\nStack:\n%s", url, err, debug.Stack())
+		logger.Printf("Error making HTTP request to URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return "", fmt.Errorf("fetching URL: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		logger.Printf("HTTP request failed url=%s status_code=%d", url, resp.StatusCode)
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("Error reading response body from URL %s: %v\nStack:\n%s", url, err, debug.Stack())
+		logger.Printf("Error reading response body from URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return "", fmt.Errorf("reading response body: %w", err)
 	}
 
@@ -170,6 +193,7 @@ type geminiCandidate struct {
 }
 
 func (g *geminiRepository) callGeminiAPI(ctx context.Context, prompt string) (string, error) {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
 
 	geminiReq := geminiRequest{
 		Contents: []geminiContent{
@@ -190,13 +214,13 @@ func (g *geminiRepository) callGeminiAPI(ctx context.Context, prompt string) (st
 
 	body, err := json.Marshal(geminiReq)
 	if err != nil {
-		log.Printf("Error marshaling Gemini request: %v\nStack:\n%s", err, debug.Stack())
+		logger.Printf("Error marshaling Gemini request: %v\nStack:\n%s", err, debug.Stack())
 		return "", fmt.Errorf("marshaling request: %w", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
-		log.Printf("Error creating Gemini API request: %v\nStack:\n%s", err, debug.Stack())
+		logger.Printf("Error creating Gemini API request: %v\nStack:\n%s", err, debug.Stack())
 		return "", fmt.Errorf("creating request: %w", err)
 	}
 
@@ -204,23 +228,25 @@ func (g *geminiRepository) callGeminiAPI(ctx context.Context, prompt string) (st
 
 	resp, err := g.httpClient.Do(httpReq)
 	if err != nil {
-		log.Printf("Error sending request to Gemini API: %v\nStack:\n%s", err, debug.Stack())
+		logger.Printf("Error sending request to Gemini API: %v\nStack:\n%s", err, debug.Stack())
 		return "", fmt.Errorf("sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
+		logger.Printf("Gemini API request failed status_code=%d response=%s", resp.StatusCode, string(bodyBytes))
 		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var geminiResp geminiResponse
 	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		log.Printf("Error decoding Gemini API response: %v\nStack:\n%s", err, debug.Stack())
+		logger.Printf("Error decoding Gemini API response: %v\nStack:\n%s", err, debug.Stack())
 		return "", fmt.Errorf("decoding response: %w", err)
 	}
 
 	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
+		logger.Printf("No content in Gemini API response")
 		return "", fmt.Errorf("no content in response")
 	}
 
@@ -228,28 +254,45 @@ func (g *geminiRepository) callGeminiAPI(ctx context.Context, prompt string) (st
 }
 
 func (g *geminiRepository) SummarizeURLForOnDemand(ctx context.Context, url string) (*SummarizeResponse, error) {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
+	start := time.Now()
+
+	logger.Printf("On-demand HTML fetch started url=%s", url)
 	// Fetch HTML content
 	htmlContent, err := g.fetchHTML(ctx, url)
 	if err != nil {
-		log.Printf("Error fetching HTML for on-demand from URL %s: %v\nStack:\n%s", url, err, debug.Stack())
+		logger.Printf("Error fetching HTML for on-demand from URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return nil, fmt.Errorf("fetching HTML: %w", err)
 	}
+
+	fetchDuration := time.Since(start)
+	logger.Printf("On-demand HTML fetch completed url=%s content_length=%d duration_ms=%d", url, len(htmlContent), fetchDuration.Milliseconds())
 
 	// Extract text from HTML
 	textContent := g.extractTextFromHTML(htmlContent)
 	if textContent == "" {
+		logger.Printf("No text content found for on-demand url=%s", url)
 		return nil, fmt.Errorf("no text content found")
 	}
+
+	logger.Printf("On-demand text extraction completed url=%s text_length=%d", url, len(textContent))
 
 	// Create prompt for on-demand mode (longer summary for individual requests)
 	prompt := g.buildOnDemandPrompt(textContent)
 
 	// Call Gemini API
+	geminiStart := time.Now()
+	logger.Printf("On-demand Gemini API call started url=%s", url)
 	summary, err := g.callGeminiAPI(ctx, prompt)
 	if err != nil {
-		log.Printf("Error calling Gemini API for on-demand URL %s: %v\nStack:\n%s", url, err, debug.Stack())
+		logger.Printf("Error calling Gemini API for on-demand URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return nil, err
 	}
+
+	geminiDuration := time.Since(geminiStart)
+	totalDuration := time.Since(start)
+	logger.Printf("On-demand Gemini API completed url=%s summary_length=%d gemini_duration_ms=%d total_duration_ms=%d",
+		url, len(summary), geminiDuration.Milliseconds(), totalDuration.Milliseconds())
 
 	return &SummarizeResponse{
 		Summary:     summary,

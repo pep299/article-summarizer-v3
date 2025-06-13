@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"runtime/debug"
 	"time"
+
+	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
 )
 
 // ArticleSummary represents an article summary for notification
@@ -39,11 +41,19 @@ func NewSlackRepository(botToken, channel string) SlackRepository {
 }
 
 func (s *slackRepository) SendArticleSummary(ctx context.Context, summary ArticleSummary) error {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
+	start := time.Now()
+
+	logger.Printf("Slack notification started title=%s channel=%s", summary.RSS.Title, s.channel)
 	message := s.formatRSSMessage(summary)
 	if err := s.sendMessage(ctx, message, s.channel); err != nil {
-		log.Printf("Error sending RSS article summary to Slack: %v\nStack:\n%s", err, debug.Stack())
+		logger.Printf("Error sending RSS article summary to Slack: %v\nStack:\n%s", err, debug.Stack())
 		return err
 	}
+
+	duration := time.Since(start)
+	logger.Printf("Slack notification completed title=%s channel=%s duration_ms=%d",
+		summary.RSS.Title, s.channel, duration.Milliseconds())
 	return nil
 }
 
@@ -67,6 +77,8 @@ func (s *slackRepository) formatRSSMessage(summary ArticleSummary) string {
 }
 
 func (s *slackRepository) sendMessage(ctx context.Context, message, channel string) error {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
+
 	type chatPostMessageRequest struct {
 		Channel   string `json:"channel"`
 		Text      string `json:"text"`
@@ -83,13 +95,13 @@ func (s *slackRepository) sendMessage(ctx context.Context, message, channel stri
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		log.Printf("Error marshaling Slack request: %v\nStack:\n%s", err, debug.Stack())
+		logger.Printf("Error marshaling Slack request: %v\nStack:\n%s", err, debug.Stack())
 		return fmt.Errorf("marshaling request: %w", err)
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", "https://slack.com/api/chat.postMessage", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("Error creating Slack HTTP request: %v\nStack:\n%s", err, debug.Stack())
+		logger.Printf("Error creating Slack HTTP request: %v\nStack:\n%s", err, debug.Stack())
 		return fmt.Errorf("creating request: %w", err)
 	}
 
@@ -98,12 +110,13 @@ func (s *slackRepository) sendMessage(ctx context.Context, message, channel stri
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
-		log.Printf("Error sending request to Slack API: %v\nStack:\n%s", err, debug.Stack())
+		logger.Printf("Error sending request to Slack API: %v\nStack:\n%s", err, debug.Stack())
 		return fmt.Errorf("sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		logger.Printf("Slack API request failed channel=%s status_code=%d", channel, resp.StatusCode)
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
@@ -111,16 +124,25 @@ func (s *slackRepository) sendMessage(ctx context.Context, message, channel stri
 }
 
 func (s *slackRepository) SendOnDemandSummary(ctx context.Context, article Item, summary SummarizeResponse, targetChannel string) error {
-	message := s.formatOnDemandMessage(article, summary)
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
+	start := time.Now()
+
 	// Use default channel if targetChannel is empty
 	channel := targetChannel
 	if channel == "" {
 		channel = s.channel
 	}
+
+	logger.Printf("On-demand Slack notification started url=%s channel=%s", article.Link, channel)
+	message := s.formatOnDemandMessage(article, summary)
 	if err := s.sendMessage(ctx, message, channel); err != nil {
-		log.Printf("Error sending on-demand summary to Slack: %v\nStack:\n%s", err, debug.Stack())
+		logger.Printf("Error sending on-demand summary to Slack: %v\nStack:\n%s", err, debug.Stack())
 		return err
 	}
+
+	duration := time.Since(start)
+	logger.Printf("On-demand Slack notification completed url=%s channel=%s duration_ms=%d",
+		article.Link, channel, duration.Milliseconds())
 	return nil
 }
 

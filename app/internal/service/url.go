@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
 	"github.com/pep299/article-summarizer-v3/internal/repository"
 )
 
@@ -25,30 +26,39 @@ func NewURL(
 }
 
 func (u *URL) Process(ctx context.Context, url string) error {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
 	startTime := time.Now()
-	log.Printf("🔍 オンデマンド記事処理開始: %s", url)
 
+	logger.Printf("On-demand URL processing started url=%s", url)
+
+	// Summarization phase
+	summaryStart := time.Now()
 	summary, err := u.gemini.SummarizeURLForOnDemand(ctx, url)
 	if err != nil {
-		log.Printf("Error summarizing URL %s: %v\nStack:\n%s", url, err, debug.Stack())
+		logger.Printf("Error summarizing URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return err
 	}
+	summaryDuration := time.Since(summaryStart)
 
 	article := repository.Item{
 		Title:  url,
 		Link:   url,
-		Source: "オンデマンドリクエスト",
+		Source: "on-demand",
 	}
 
+	// Slack notification phase
+	slackStart := time.Now()
 	// Use the on-demand specific method for Slack notification
 	// Note: The targetChannel should be passed from the application layer
 	// For now, using the default channel of the slack repository
 	if err := u.slack.SendOnDemandSummary(ctx, article, *summary, ""); err != nil {
-		log.Printf("Error sending on-demand Slack summary for URL %s: %v\nStack:\n%s", url, err, debug.Stack())
+		logger.Printf("Error sending on-demand Slack summary for URL %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return err
 	}
+	slackDuration := time.Since(slackStart)
 
-	duration := time.Since(startTime)
-	log.Printf("✅ オンデマンド記事処理完了: %s (所要時間: %v)", url, duration)
+	totalDuration := time.Since(startTime)
+	logger.Printf("On-demand URL processing completed url=%s total_duration_ms=%d summary_duration_ms=%d slack_duration_ms=%d",
+		url, totalDuration.Milliseconds(), summaryDuration.Milliseconds(), slackDuration.Milliseconds())
 	return nil
 }
