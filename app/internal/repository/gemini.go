@@ -111,7 +111,12 @@ func (g *geminiRepository) fetchHTML(ctx context.Context, url string) (string, e
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logger.Printf("HTTP request failed url=%s status_code=%d", url, resp.StatusCode)
+		// Read response body for error details
+		responseBody, _ := io.ReadAll(resp.Body)
+
+		// Log detailed error information
+		logger.Printf("HTTP request failed url=%s status_code=%d request_headers=%v response_headers=%v response_body=%s\nStack:\n%s",
+			url, resp.StatusCode, req.Header, resp.Header, string(responseBody), debug.Stack())
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
