@@ -14,8 +14,8 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# Go workspace file
-go.work
+# Go workspace file (for app/ go.mod module path resolution)
+# go.work
 
 # Build directory
 build/
