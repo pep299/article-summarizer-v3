@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
+
 	"github.com/pep299/article-summarizer-v3/internal/repository"
 	"github.com/pep299/article-summarizer-v3/internal/service/feed"
 	"github.com/pep299/article-summarizer-v3/internal/service/limiter"
@@ -67,7 +68,7 @@ func (f *Feed) Process(ctx context.Context, feedName string) error {
 
 	articles, err := f.fetchAndPrepareArticles(ctx, strategy, feedName)
 	if err != nil {
-		logger.Printf("Error fetching articles for feed %s: %v\nStack:\n%s", feedName, err, debug.Stack())
+		logger.Printf("Error fetching articles for feed %s: %v", feedName, err)
 		return err
 	}
 
@@ -83,7 +84,7 @@ func (f *Feed) Process(ctx context.Context, feedName string) error {
 	}
 
 	if err := f.processArticles(ctx, unprocessedArticles, strategy.GetConfig().DisplayName); err != nil {
-		logger.Printf("Error processing articles for feed %s: %v\nStack:\n%s", feedName, err, debug.Stack())
+		logger.Printf("Error processing articles for feed %s: %v", feedName, err)
 		return err
 	}
 
@@ -105,7 +106,7 @@ func (f *Feed) fetchAndPrepareArticles(ctx context.Context, strategy feed.FeedSt
 	headers := strategy.GetRequestHeaders()
 	xmlContent, err := f.rss.FetchFeedXML(ctx, config.URL, headers)
 	if err != nil {
-		logger.Printf("Error fetching RSS XML for feed %s: %v\nStack:\n%s", feedName, err, debug.Stack())
+		logger.Printf("Error fetching RSS XML for feed %s: %v", feedName, err)
 		return nil, fmt.Errorf("fetching RSS feed %s: %w", feedName, err)
 	}
 
@@ -116,7 +117,7 @@ func (f *Feed) fetchAndPrepareArticles(ctx context.Context, strategy feed.FeedSt
 	parseStart := time.Now()
 	articles, err := strategy.ParseFeed(xmlContent)
 	if err != nil {
-		logger.Printf("Error parsing RSS feed %s: %v\nStack:\n%s", feedName, err, debug.Stack())
+		logger.Printf("Error parsing RSS feed %s: %v", feedName, err)
 		return nil, fmt.Errorf("parsing RSS feed %s: %w", feedName, err)
 	}
 
@@ -175,7 +176,7 @@ func (f *Feed) processArticles(ctx context.Context, articles []repository.Item, 
 	for i, article := range articles {
 		articleStart := time.Now()
 		if err := f.processArticle(ctx, article); err != nil {
-			logger.Printf("Error processing article %s: %v\nStack:\n%s", article.Title, err, debug.Stack())
+			logger.Printf("Error processing article %s: %v", article.Title, err)
 			return fmt.Errorf("processing article %s: %w", article.Title, err)
 		}
 		articleDuration := time.Since(articleStart)
@@ -198,7 +199,7 @@ func (f *Feed) processArticle(ctx context.Context, article repository.Item) erro
 	summaryStart := time.Now()
 	summary, err := f.gemini.SummarizeURL(ctx, article.Link)
 	if err != nil {
-		logger.Printf("Error summarizing article %s: %v\nStack:\n%s", article.Title, err, debug.Stack())
+		logger.Printf("Error summarizing article %s: %v", article.Title, err)
 		return fmt.Errorf("summarizing article: %w", err)
 	}
 	summaryDuration := time.Since(summaryStart)
@@ -211,7 +212,7 @@ func (f *Feed) processArticle(ctx context.Context, article repository.Item) erro
 	// Slack notification phase
 	slackStart := time.Now()
 	if err := f.slack.SendArticleSummary(ctx, articleSummary); err != nil {
-		logger.Printf("Error sending Slack notification for article %s: %v\nStack:\n%s", article.Title, err, debug.Stack())
+		logger.Printf("Error sending Slack notification for article %s: %v", article.Title, err)
 		return fmt.Errorf("sending Slack notification: %w", err)
 	}
 	slackDuration := time.Since(slackStart)

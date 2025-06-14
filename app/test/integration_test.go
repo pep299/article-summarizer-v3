@@ -208,7 +208,7 @@ func TestIntegration_ErrorPropagation(t *testing.T) {
 	t.Logf("Application created successfully with test configuration")
 }
 
-// Benchmark tests for integration scenarios
+// Benchmark tests for integration scenarios.
 func BenchmarkIntegration_ApplicationCreation(b *testing.B) {
 	// Set test environment for benchmark
 	os.Setenv("GEMINI_API_KEY", "test-key")

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
+
 	"github.com/pep299/article-summarizer-v3/internal/transport/server"
 )
 

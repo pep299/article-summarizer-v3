@@ -12,13 +12,15 @@ type Config struct {
 	Host string `json:"host"`
 
 	// Gemini API settings
-	GeminiAPIKey string `json:"-"` // Don't expose in JSON
-	GeminiModel  string `json:"gemini_model"`
+	GeminiAPIKey  string `json:"-"` // Don't expose in JSON
+	GeminiModel   string `json:"gemini_model"`
+	GeminiBaseURL string `json:"gemini_base_url"` // For testing
 
 	// Slack settings
 	SlackBotToken       string `json:"-"` // Don't expose in JSON
 	SlackChannel        string `json:"slack_channel"`
 	WebhookSlackChannel string `json:"webhook_slack_channel"`
+	SlackBaseURL        string `json:"slack_base_url"` // For testing
 
 	// Webhook settings
 	WebhookAuthToken string `json:"-"` // Don't expose in JSON
@@ -26,15 +28,16 @@ type Config struct {
 
 // Load reads configuration from environment variables
 func Load() (*Config, error) {
-
 	config := &Config{
 		Port:                "8080",
 		Host:                "0.0.0.0",
 		GeminiAPIKey:        getEnvOrDefault("GEMINI_API_KEY", ""),
 		GeminiModel:         "gemini-2.5-flash-preview-05-20",
+		GeminiBaseURL:       getEnvOrDefault("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/models"),
 		SlackBotToken:       getEnvOrDefault("SLACK_BOT_TOKEN", ""),
 		SlackChannel:        getEnvOrDefault("SLACK_CHANNEL", "#article-summarizer"),
 		WebhookSlackChannel: getEnvOrDefault("WEBHOOK_SLACK_CHANNEL", "#ondemand-article-summary"),
+		SlackBaseURL:        getEnvOrDefault("SLACK_BASE_URL", "https://slack.com/api"),
 		WebhookAuthToken:    getEnvOrDefault("WEBHOOK_AUTH_TOKEN", ""),
 	}
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+
 	"github.com/pep299/article-summarizer-v3/internal/application"
 	"github.com/pep299/article-summarizer-v3/internal/repository"
 	"github.com/pep299/article-summarizer-v3/internal/service"
@@ -18,7 +19,7 @@ import (
 	"github.com/pep299/article-summarizer-v3/internal/transport/handler"
 )
 
-// E2ETestConfig holds test configuration
+// E2ETestConfig holds test configuration.
 type E2ETestConfig struct {
 	GeminiAPIKey  string
 	SlackBotToken string
@@ -43,22 +44,6 @@ func loadE2EConfig() *E2ETestConfig {
 		SlackBotToken: slackToken,
 		SlackChannel:  "#dev-null", // テスト用チャンネル
 	}
-}
-
-func getAPIKey() string {
-	// E2E_プレフィックス付きを優先、なければ本番用
-	if key := os.Getenv("E2E_GEMINI_API_KEY"); key != "" {
-		return key
-	}
-	return os.Getenv("GEMINI_API_KEY")
-}
-
-func getSlackToken() string {
-	// E2E_プレフィックス付きを優先、なければ本番用
-	if token := os.Getenv("E2E_SLACK_BOT_TOKEN"); token != "" {
-		return token
-	}
-	return os.Getenv("SLACK_BOT_TOKEN")
 }
 
 func setupE2EEnvironment(config *E2ETestConfig) {
@@ -87,7 +72,7 @@ func cleanupE2EEnvironment() {
 	os.Unsetenv("CACHE_DURATION_HOURS")
 }
 
-// createTestApplication creates application with test article limiter
+// createTestApplication creates application with test article limiter.
 func createTestApplication() (*application.Application, *handler.Process, error) {
 	// Load configuration
 	cfg, err := application.Load()
@@ -97,12 +82,12 @@ func createTestApplication() (*application.Application, *handler.Process, error)
 
 	// Create repositories
 	rssRepo := repository.NewRSSRepository()
-	geminiRepo := repository.NewGeminiRepository(cfg.GeminiAPIKey, cfg.GeminiModel)
+	geminiRepo := repository.NewGeminiRepository(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiBaseURL)
 	processedRepo, err := repository.NewProcessedArticleRepository()
 	if err != nil {
 		return nil, nil, err
 	}
-	slackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannel)
+	slackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannel, cfg.SlackBaseURL)
 
 	// Create services with test limiter
 	testLimiter := limiter.NewTestArticleLimiter()
@@ -120,7 +105,7 @@ func createTestApplication() (*application.Application, *handler.Process, error)
 	return app, processHandler, nil
 }
 
-// GCSヘルパー関数
+// GCSヘルパー関数.
 func setupTestGCSIndex(t *testing.T) {
 	ctx := context.Background()
 	client, err := storage.NewClient(ctx)
@@ -217,20 +202,9 @@ func verifyGCSIndexUpdated(t *testing.T, expectedCount int) {
 
 // 重複チェックはユニットテストで十分にテスト済み
 
-// TestE2E_HatenaRSSToSlack tests the full pipeline: Hatena RSS → Summarization → Slack notification
+// TestE2E_HatenaRSSToSlack tests the full pipeline: Hatena RSS → Summarization → Slack notification.
 func TestE2E_HatenaRSSToSlack(t *testing.T) {
-	t.Logf("DEBUG: Direct ENV GEMINI_API_KEY: %s", os.Getenv("GEMINI_API_KEY")[:10])
-	t.Logf("DEBUG: Direct ENV SLACK_BOT_TOKEN: %s", os.Getenv("SLACK_BOT_TOKEN")[:15])
-	t.Logf("DEBUG: getAPIKey(): %s", getAPIKey()[:10])
-	t.Logf("DEBUG: getSlackToken(): %s", getSlackToken()[:15])
-
 	config := loadE2EConfig()
-	t.Logf("DEBUG: config.GeminiAPIKey: %s", config.GeminiAPIKey)
-	t.Logf("DEBUG: config.SlackBotToken: %s", config.SlackBotToken)
-
-	if config.GeminiAPIKey == "" || config.SlackBotToken == "" {
-		t.Skip("E2E test requires GEMINI_API_KEY and SLACK_BOT_TOKEN environment variables")
-	}
 
 	t.Logf("🚀 Starting Hatena RSS E2E test (max 1 article)")
 
@@ -300,18 +274,9 @@ func TestE2E_HatenaRSSToSlack(t *testing.T) {
 	t.Logf("Response: %+v", result)
 }
 
-// TestE2E_LobstersRSSToSlack tests the full pipeline: Lobsters RSS → Summarization → Slack notification
+// TestE2E_LobstersRSSToSlack tests the full pipeline: Lobsters RSS → Summarization → Slack notification.
 func TestE2E_LobstersRSSToSlack(t *testing.T) {
-	t.Logf("DEBUG: Direct ENV GEMINI_API_KEY: %s", os.Getenv("GEMINI_API_KEY")[:10])
-	t.Logf("DEBUG: Direct ENV SLACK_BOT_TOKEN: %s", os.Getenv("SLACK_BOT_TOKEN")[:15])
-
 	config := loadE2EConfig()
-	t.Logf("DEBUG: config.GeminiAPIKey: %s", config.GeminiAPIKey)
-	t.Logf("DEBUG: config.SlackBotToken: %s", config.SlackBotToken)
-
-	if config.GeminiAPIKey == "" || config.SlackBotToken == "" {
-		t.Skip("E2E test requires GEMINI_API_KEY and SLACK_BOT_TOKEN environment variables")
-	}
 
 	t.Logf("🚀 Starting Lobsters RSS E2E test (max 1 article)")
 
@@ -381,18 +346,9 @@ func TestE2E_LobstersRSSToSlack(t *testing.T) {
 	t.Logf("Response: %+v", result)
 }
 
-// TestE2E_WebhookToSlack tests the webhook endpoint: URL → Summarization → Slack notification
+// TestE2E_WebhookToSlack tests the webhook endpoint: URL → Summarization → Slack notification.
 func TestE2E_WebhookToSlack(t *testing.T) {
-	t.Logf("DEBUG: Direct ENV GEMINI_API_KEY: %s", os.Getenv("GEMINI_API_KEY")[:10])
-	t.Logf("DEBUG: Direct ENV SLACK_BOT_TOKEN: %s", os.Getenv("SLACK_BOT_TOKEN")[:15])
-
 	config := loadE2EConfig()
-	t.Logf("DEBUG: config.GeminiAPIKey: %s", config.GeminiAPIKey)
-	t.Logf("DEBUG: config.SlackBotToken: %s", config.SlackBotToken)
-
-	if config.GeminiAPIKey == "" || config.SlackBotToken == "" {
-		t.Skip("E2E test requires GEMINI_API_KEY and SLACK_BOT_TOKEN environment variables")
-	}
 
 	t.Logf("🚀 Starting Webhook E2E test")
 
@@ -470,7 +426,7 @@ func TestE2E_WebhookToSlack(t *testing.T) {
 	t.Logf("Response: %+v", result)
 }
 
-// TestE2E_ErrorHandling tests error scenarios
+// TestE2E_ErrorHandling tests error scenarios.
 func TestE2E_ErrorHandling(t *testing.T) {
 	// Test with minimal config (should still validate basic structure)
 	os.Setenv("GEMINI_API_KEY", "test-key")

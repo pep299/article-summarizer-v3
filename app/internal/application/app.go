@@ -27,13 +27,13 @@ func New() (*Application, error) {
 
 	// Create repositories (now with direct implementations)
 	rssRepo := repository.NewRSSRepository()
-	geminiRepo := repository.NewGeminiRepository(cfg.GeminiAPIKey, cfg.GeminiModel)
+	geminiRepo := repository.NewGeminiRepository(cfg.GeminiAPIKey, cfg.GeminiModel, cfg.GeminiBaseURL)
 	processedRepo, err := repository.NewProcessedArticleRepository()
 	if err != nil {
 		return nil, fmt.Errorf("creating processed article repository: %w", err)
 	}
-	slackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannel)
-	webhookSlackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.WebhookSlackChannel)
+	slackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannel, cfg.SlackBaseURL)
+	webhookSlackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.WebhookSlackChannel, cfg.SlackBaseURL)
 
 	// Create services (business logic) - use production limiter by default
 	articleLimiter := limiter.NewProductionArticleLimiter()

@@ -4,8 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"runtime/debug"
 	"time"
+
+	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
 )
 
 // Item represents an RSS item
@@ -45,6 +49,8 @@ func NewRSSRepository() RSSRepository {
 }
 
 func (r *rssRepository) FetchFeedXML(ctx context.Context, url string, headers map[string]string) (string, error) {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("creating request: %w", err)
@@ -57,11 +63,13 @@ func (r *rssRepository) FetchFeedXML(ctx context.Context, url string, headers ma
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
+		logger.Printf("Error making HTTP request to RSS feed %s: %v\nStack:\n%s", url, err, debug.Stack())
 		return "", fmt.Errorf("fetching feed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		logger.Printf("RSS feed request failed url=%s status_code=%d\nStack:\n%s", url, resp.StatusCode, debug.Stack())
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 

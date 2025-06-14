@@ -1,0 +1,110 @@
+# golangci-lint configuration
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  disable-all: true
+  enable:
+    # 基本的なリンター
+    - errcheck      # エラーチェック漏れ
+    - gosimple      # コード簡略化
+    - govet         # go vet
+    - ineffassign   # 未使用代入
+    - staticcheck   # 静的解析
+    - unused        # 未使用コード
+    - misspell      # スペルミス
+    
+    # フォーマット・import
+    - gofumpt       # gofmtよりも厳格なフォーマット
+    - gci           # import文の整理・グループ化
+    - revive        # golintの代替
+    - unconvert     # 不要な型変換
+    
+    # セキュリティ・バグ検出
+    - gosec         # セキュリティ問題
+    - bodyclose     # HTTP response bodyのclose漏れ
+    - copyloopvar   # ループ変数コピー検出
+    - errorlint     # Go 1.13 error wrapping
+    - nilnil        # nil比較のベストプラクティス
+    
+    # パフォーマンス
+    - prealloc      # スライス事前確保
+    - makezero      # make([]T, len)のアンチパターン
+    
+    # 可読性
+    - dupword       # 重複単語検出
+    - godox         # TODO/FIXME検出
+
+linters-settings:
+  errcheck:
+    # 無視するエラーパターン（新しい形式）
+    exclude-functions:
+      - fmt.Print.*
+      - fmt.Fprint.*
+      - (*os.File).Close
+      - (*net/http.ResponseWriter).Write
+      - (*encoding/json.Encoder).Encode
+  
+  revive:
+    rules:
+      - name: exported
+        disabled: true  # exportedの命名規則を無効化
+      
+  gosec:
+    excludes:
+      - G101  # ハードコードされたクレデンシャル（テストで許可）
+  
+  gci:
+    # import文のグループ化設定
+    sections:
+      - standard  # 標準ライブラリ
+      - default   # サードパーティ
+      - prefix(github.com/pep299/article-summarizer-v3)  # 自プロジェクト
+  
+  godox:
+    # 検出するキーワード
+    keywords:
+      - TODO
+      - FIXME
+      - HACK
+      - BUG
+  
+  dupword:
+    # 重複語検出の設定
+    keywords:
+      - "the the"
+      - "a a"
+      - "an an"
+
+issues:
+  exclude-rules:
+    # テストファイルでの特定ルール無効化
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+        - errorlint  # テストでのエラー処理は緩和
+    
+    # E2Eテストでのエラーチェック緩和
+    - path: test/.*\.go
+      linters:
+        - errcheck
+        - gosec
+        - errorlint  # テストでのエラー処理は緩和
+    
+    # HTTPハンドラーでのレスポンス書き込みエラーを無視
+    - path: internal/transport/handler/.*\.go
+      text: "Error return value.*response\\.Write.*is not checked"
+      linters:
+        - errcheck
+        
+    # JSONエンコードエラーを無視（サーバー応答）
+    - path: internal/transport/server/.*\.go
+      text: "Error return value.*Encode.*is not checked"
+      linters:
+        - errcheck
+  
+  max-issues-per-linter: 0
+  max-same-issues: 0

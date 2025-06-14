@@ -11,8 +11,7 @@ import (
 	"time"
 )
 
-// TestMain_Integration tests the actual server startup using cmd/server/main.go
-// This tests the complete flow: cloud_function.go init() -> funcframework.Start() -> HTTP server
+// This tests the complete flow: cloud_function.go init() -> funcframework.Start() -> HTTP server.
 func TestMain_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
@@ -79,7 +78,7 @@ func TestMain_Integration(t *testing.T) {
 	t.Logf("✅ Main integration test passed - server startup and health check working")
 }
 
-// waitForServer waits for the server to become available
+// waitForServer waits for the server to become available.
 func waitForServer(t *testing.T, url string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 
@@ -96,7 +95,7 @@ func waitForServer(t *testing.T, url string, timeout time.Duration) bool {
 	return false
 }
 
-// TestMain_EnvValidation tests that missing FUNCTION_TARGET causes server startup failure
+// TestMain_EnvValidation tests that missing FUNCTION_TARGET causes server startup failure.
 func TestMain_EnvValidation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")

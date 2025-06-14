@@ -3,6 +3,7 @@ package feed
 import (
 	"encoding/xml"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/pep299/article-summarizer-v3/internal/repository"
@@ -16,9 +17,15 @@ func NewHatenaStrategy() *HatenaStrategy {
 }
 
 func (h *HatenaStrategy) GetConfig() FeedConfig {
+	url := "https://b.hatena.ne.jp/hotentry/it.rss"
+	// テスト用URLオーバーライド
+	if testURL := os.Getenv("HATENA_RSS_URL"); testURL != "" {
+		url = testURL
+	}
+
 	return FeedConfig{
 		Name:        "hatena",
-		URL:         "https://b.hatena.ne.jp/hotentry/it.rss",
+		URL:         url,
 		DisplayName: "はてブ テクノロジー",
 	}
 }
