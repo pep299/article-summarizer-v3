@@ -15,13 +15,14 @@ import (
 // Item represents an RSS item
 type Item struct {
 	Title       string    `xml:"title"`
-	Link        string    `xml:"link"`
+	Link        string    `xml:"link"`        // 記事の実際のURL（外部URL）
 	Description string    `xml:"description"`
 	PubDate     string    `xml:"pubDate"`
 	GUID        string    `xml:"guid"`
 	Category    []string  `xml:"category"`
 	ParsedDate  time.Time `xml:"-"`
 	Source      string    `xml:"-"`
+	CommentURL  string    `xml:"-"`           // コメント/ディスカッションのURL
 }
 
 func (i *Item) GetUniqueID() string {

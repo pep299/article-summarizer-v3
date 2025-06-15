@@ -25,6 +25,8 @@ type SummarizeResponse struct {
 type GeminiRepository interface {
 	SummarizeURL(ctx context.Context, url string) (*SummarizeResponse, error)
 	SummarizeURLForOnDemand(ctx context.Context, url string) (*SummarizeResponse, error)
+	SummarizeText(ctx context.Context, text string) (string, error)
+	SummarizeComments(ctx context.Context, commentsText string) (string, error)
 }
 
 type geminiRepository struct {
@@ -326,4 +328,77 @@ func (g *geminiRepository) buildOnDemandPrompt(textContent string) string {
 
 テキスト内容:
 %s`, textContent)
+}
+
+// SummarizeText summarizes the provided text content directly
+func (g *geminiRepository) SummarizeText(ctx context.Context, text string) (string, error) {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
+	
+	// Build prompt for text summarization (using detailed on-demand format)
+	prompt := g.buildOnDemandPrompt(text)
+	
+	logger.Printf("Text summarization started text_length=%d", len(text))
+	
+	// Call Gemini API
+	geminiStart := time.Now()
+	summary, err := g.callGeminiAPI(ctx, prompt)
+	if err != nil {
+		logger.Printf("Error calling Gemini API for text summarization: %v", err)
+		return "", fmt.Errorf("calling Gemini API: %w", err)
+	}
+	
+	geminiDuration := time.Since(geminiStart)
+	logger.Printf("Text summarization completed summary_length=%d duration_ms=%d", 
+		len(summary), geminiDuration.Milliseconds())
+	
+	return summary, nil
+}
+
+// SummarizeComments summarizes comments/discussions using specialized prompt
+func (g *geminiRepository) SummarizeComments(ctx context.Context, commentsText string) (string, error) {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
+	
+	// Build specialized prompt for comments
+	prompt := g.buildCommentsPrompt(commentsText)
+	
+	logger.Printf("Comments summarization started text_length=%d", len(commentsText))
+	
+	// Call Gemini API
+	geminiStart := time.Now()
+	summary, err := g.callGeminiAPI(ctx, prompt)
+	if err != nil {
+		logger.Printf("Error calling Gemini API for comments summarization: %v", err)
+		return "", fmt.Errorf("calling Gemini API: %w", err)
+	}
+	
+	geminiDuration := time.Since(geminiStart)
+	logger.Printf("Comments summarization completed summary_length=%d duration_ms=%d", 
+		len(summary), geminiDuration.Milliseconds())
+	
+	return summary, nil
+}
+
+// buildCommentsPrompt creates specialized prompt for comments/discussions
+func (g *geminiRepository) buildCommentsPrompt(commentsText string) string {
+	// Limit content to 10KB for better focus and 1000-char summary
+	if len(commentsText) > 10000 {
+		commentsText = commentsText[:10000]
+	}
+
+	return fmt.Sprintf(`以下はオンラインディスカッション・コメントのテキストです。コミュニティの議論内容を分析し、1000文字以内で簡潔に要約してください。
+
+**重要な制約:**
+- 推測や創作は一切せず、実際のコメント内容のみを要約してください
+- コメントに記載されていない情報は追加しないでください
+- スコアの高いコメントや建設的な議論を重視してください
+- 1000文字以内という制限を厳守してください
+
+コメント要約として、以下の構造で簡潔に出力してください：
+- 📝 **概要:** 議論の主なトピック（2-3行）
+- 💡 **主要な解決策:** 提案された解決策や代替案（2-3行）
+- 🔍 **技術的ポイント:** 重要な技術的議論（2-3行）
+- 🗣️ **コミュニティの反応:** 注目すべき意見や傾向（1-2行）
+
+コメント内容:
+%s`, commentsText)
 }

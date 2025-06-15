@@ -44,11 +44,11 @@ func TestFeedRegistry(t *testing.T) {
 
 func TestGetDefaultFeeds(t *testing.T) {
 	defaults := GetDefaultFeeds()
-	if len(defaults) != 2 {
-		t.Errorf("Expected 2 default feeds, got %d", len(defaults))
+	if len(defaults) != 3 {
+		t.Errorf("Expected 3 default feeds, got %d", len(defaults))
 	}
 
-	// Check that we have hatena and lobsters
+	// Check that we have hatena, lobsters, and reddit
 	feedNames := make(map[string]bool)
 	for _, strategy := range defaults {
 		feedNames[strategy.GetConfig().Name] = true
@@ -59,6 +59,9 @@ func TestGetDefaultFeeds(t *testing.T) {
 	}
 	if !feedNames["lobsters"] {
 		t.Error("Expected lobsters in default feeds")
+	}
+	if !feedNames["reddit"] {
+		t.Error("Expected reddit in default feeds")
 	}
 }
 

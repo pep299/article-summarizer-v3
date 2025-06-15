@@ -346,6 +346,78 @@ func TestE2E_LobstersRSSToSlack(t *testing.T) {
 	t.Logf("Response: %+v", result)
 }
 
+// TestE2E_RedditRSSToSlack tests the full pipeline: Reddit RSS → External URL + Comment Summarization → Slack notification.
+func TestE2E_RedditRSSToSlack(t *testing.T) {
+	config := loadE2EConfig()
+
+	t.Logf("🚀 Starting Reddit RSS E2E test (max 1 article, external URL + comments)")
+
+	// GCSテスト用インデックス作成
+	setupTestGCSIndex(t)
+	defer cleanupTestGCSIndex(t)
+
+	setupE2EEnvironment(config)
+	defer cleanupE2EEnvironment()
+
+	// Create application with test limiter
+	app, processHandler, err := createTestApplication()
+	if err != nil {
+		t.Fatalf("Failed to create test application: %v", err)
+	}
+	defer app.Close()
+
+	// Create test server
+	server := httptest.NewServer(processHandler)
+	defer server.Close()
+
+	// Test Reddit RSS processing
+	requestBody := map[string]string{
+		"feedName": "reddit",
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		t.Fatalf("Failed to marshal request: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute) // Reddit processing takes longer
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", server.URL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("Failed to send request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&errorResp)
+		t.Fatalf("Expected status 200, got %d. Error: %v", resp.StatusCode, errorResp)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if result["status"] != "success" {
+		t.Errorf("Expected status 'success', got '%v'", result["status"])
+	}
+
+	// GCSインデックスが更新されているか確認
+	verifyGCSIndexUpdated(t, 1) // 1件処理されたはず
+
+	t.Logf("✅ E2E Test passed: Reddit RSS → External URL + Comment Summarization → Slack (#dev-null)")
+	t.Logf("Response: %+v", result)
+}
+
 // TestE2E_WebhookToSlack tests the webhook endpoint: URL → Summarization → Slack notification.
 func TestE2E_WebhookToSlack(t *testing.T) {
 	config := loadE2EConfig()

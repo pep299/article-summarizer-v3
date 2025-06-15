@@ -175,7 +175,7 @@ func (f *Feed) processArticles(ctx context.Context, articles []repository.Item, 
 
 	for i, article := range articles {
 		articleStart := time.Now()
-		if err := f.processArticle(ctx, article); err != nil {
+		if err := f.ProcessArticle(ctx, article); err != nil {
 			logger.Printf("Error processing article %s: %v", article.Title, err)
 			return fmt.Errorf("processing article %s: %w", article.Title, err)
 		}
@@ -189,13 +189,14 @@ func (f *Feed) processArticles(ctx context.Context, articles []repository.Item, 
 	return nil
 }
 
-func (f *Feed) processArticle(ctx context.Context, article repository.Item) error {
+func (f *Feed) ProcessArticle(ctx context.Context, article repository.Item) error {
 	logger := log.New(funcframework.LogWriter(ctx), "", 0)
 	start := time.Now()
 
-	logger.Printf("Article processing started title=%s url=%s", article.Title, article.Link)
+	logger.Printf("Article processing started title=%s url=%s comment_url=%s source=%s", 
+		article.Title, article.Link, article.CommentURL, article.Source)
 
-	// Summarization phase
+	// Phase 1: Summarize article content
 	summaryStart := time.Now()
 	summary, err := f.gemini.SummarizeURL(ctx, article.Link)
 	if err != nil {
@@ -204,20 +205,38 @@ func (f *Feed) processArticle(ctx context.Context, article repository.Item) erro
 	}
 	summaryDuration := time.Since(summaryStart)
 
-	articleSummary := repository.ArticleSummary{
+	// Phase 2: Send article summary notification
+	slackStart := time.Now()
+	if err := f.slack.SendArticleSummary(ctx, repository.ArticleSummary{
 		RSS:     article,
 		Summary: *summary,
+	}); err != nil {
+		logger.Printf("Error sending article Slack notification for %s: %v", article.Title, err)
+		return fmt.Errorf("sending article Slack notification: %w", err)
+	}
+	slackDuration1 := time.Since(slackStart)
+
+	// Phase 3: Generate and send comment summary (if has comments)
+	var commentDuration, slackDuration2 time.Duration
+	if article.CommentURL != "" && article.CommentURL != article.Link {
+		commentStart := time.Now()
+		commentSummary, err := f.generateCommentSummary(ctx, article)
+		if err != nil {
+			logger.Printf("Error generating comment summary for %s: %v", article.Title, err)
+			return fmt.Errorf("generating comment summary: %w", err)
+		}
+		commentDuration = time.Since(commentStart)
+
+		// Send comment summary notification
+		slackStart2 := time.Now()
+		if err := f.slack.SendCommentSummary(ctx, article, commentSummary); err != nil {
+			logger.Printf("Error sending comment Slack notification for %s: %v", article.Title, err)
+			return fmt.Errorf("sending comment Slack notification: %w", err)
+		}
+		slackDuration2 = time.Since(slackStart2)
 	}
 
-	// Slack notification phase
-	slackStart := time.Now()
-	if err := f.slack.SendArticleSummary(ctx, articleSummary); err != nil {
-		logger.Printf("Error sending Slack notification for article %s: %v", article.Title, err)
-		return fmt.Errorf("sending Slack notification: %w", err)
-	}
-	slackDuration := time.Since(slackStart)
-
-	// Mark as processed phase
+	// Phase 4: Mark as processed
 	processStart := time.Now()
 	if err := f.processed.MarkAsProcessed(ctx, article); err != nil {
 		logger.Printf("Error marking article as processed %s: %v\nStack:\n%s", article.Title, err, debug.Stack())
@@ -226,7 +245,75 @@ func (f *Feed) processArticle(ctx context.Context, article repository.Item) erro
 	processDuration := time.Since(processStart)
 
 	totalDuration := time.Since(start)
-	logger.Printf("Article processing completed title=%s total_duration_ms=%d summary_duration_ms=%d slack_duration_ms=%d process_duration_ms=%d",
-		article.Title, totalDuration.Milliseconds(), summaryDuration.Milliseconds(), slackDuration.Milliseconds(), processDuration.Milliseconds())
+	if article.CommentURL != "" && article.CommentURL != article.Link {
+		logger.Printf("Article processing completed title=%s total_duration_ms=%d summary_duration_ms=%d comment_duration_ms=%d slack1_duration_ms=%d slack2_duration_ms=%d process_duration_ms=%d",
+			article.Title, totalDuration.Milliseconds(), summaryDuration.Milliseconds(), commentDuration.Milliseconds(), slackDuration1.Milliseconds(), slackDuration2.Milliseconds(), processDuration.Milliseconds())
+	} else {
+		logger.Printf("Article processing completed title=%s total_duration_ms=%d summary_duration_ms=%d slack_duration_ms=%d process_duration_ms=%d",
+			article.Title, totalDuration.Milliseconds(), summaryDuration.Milliseconds(), slackDuration1.Milliseconds(), processDuration.Milliseconds())
+	}
 	return nil
+}
+
+// generateCommentSummary generates a summary of comments/discussions for any source
+func (f *Feed) generateCommentSummary(ctx context.Context, article repository.Item) (string, error) {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
+	
+	logger.Printf("Generating comment summary for %s from %s", article.Source, article.CommentURL)
+	
+	switch article.Source {
+	case "reddit":
+		return f.generateRedditCommentSummary(ctx, article.CommentURL)
+	case "hatena", "lobsters":
+		// 将来的にHatenaやLobstersのコメント要約も対応可能
+		return "", fmt.Errorf("comment summarization not yet implemented for %s", article.Source)
+	default:
+		return "", fmt.Errorf("unknown source for comment summarization: %s", article.Source)
+	}
+}
+
+// generateRedditCommentSummary generates a summary of Reddit comments for a given post URL
+func (f *Feed) generateRedditCommentSummary(ctx context.Context, redditURL string) (string, error) {
+	logger := log.New(funcframework.LogWriter(ctx), "", 0)
+	
+	// Get Reddit strategy from registry
+	strategy, exists := f.registry.GetStrategy("reddit")
+	if !exists {
+		return "", fmt.Errorf("reddit strategy not found")
+	}
+	
+	redditStrategy, ok := strategy.(*feed.RedditStrategy)
+	if !ok {
+		return "", fmt.Errorf("strategy is not a Reddit strategy")
+	}
+	
+	// Fetch comments from Reddit using JSON API
+	logger.Printf("Fetching Reddit comments from %s using JSON API", redditURL)
+	comments, err := redditStrategy.FetchComments(ctx, redditURL, f.rss)
+	if err != nil {
+		return "", fmt.Errorf("fetching Reddit comments: %w", err)
+	}
+	
+	if len(comments) == 0 {
+		return "", fmt.Errorf("no comments found for Reddit post")
+	}
+	
+	logger.Printf("Successfully fetched %d Reddit comments from JSON API", len(comments))
+	
+	// Combine comments into text
+	commentsText := redditStrategy.CombineCommentsText(comments)
+	if commentsText == "" {
+		return "", fmt.Errorf("no comment text to summarize")
+	}
+	
+	logger.Printf("Combined comments text length: %d characters", len(commentsText))
+	
+	// Summarize the comments using specialized comment prompt
+	summary, err := f.gemini.SummarizeComments(ctx, commentsText)
+	if err != nil {
+		return "", fmt.Errorf("summarizing Reddit comments: %w", err)
+	}
+	
+	logger.Printf("Successfully generated Reddit comment summary")
+	return summary, nil
 }

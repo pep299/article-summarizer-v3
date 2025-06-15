@@ -30,5 +30,6 @@ func GetDefaultFeeds() []FeedStrategy {
 	return []FeedStrategy{
 		NewHatenaStrategy(),
 		NewLobstersStrategy(),
+		NewRedditStrategy(),
 	}
 }
