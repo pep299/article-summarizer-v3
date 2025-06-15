@@ -23,10 +23,9 @@ func CreateHandler() (http.Handler, func(), error) {
 
 	// Setup routes (pure HTTP routing)
 	mux := http.NewServeMux()
-	mux.Handle("/process", authMiddleware(app.ProcessHandler))
-	mux.Handle("/webhook", authMiddleware(app.WebhookHandler))
-	mux.HandleFunc("/hc", healthCheck)                  // Health check endpoint
-	mux.Handle("/", authMiddleware(app.ProcessHandler)) // Default to process
+	mux.Handle("POST /process", authMiddleware(app.ProcessHandler))
+	mux.Handle("POST /webhook", authMiddleware(app.WebhookHandler))
+	mux.HandleFunc("GET /hc", healthCheck) // Health check endpoint
 
 	// Return handler and cleanup function
 	cleanup := func() {

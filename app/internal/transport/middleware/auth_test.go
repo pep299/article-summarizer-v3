@@ -93,21 +93,21 @@ func TestAuth_WrongBearerFormat(t *testing.T) {
 	}
 }
 
-// TestAuth_NonPOSTMethod tests that non-POST methods are rejected
-func TestAuth_NonPOSTMethod(t *testing.T) {
+// TestAuth_GETMethod tests that GET methods work with valid auth
+func TestAuth_GETMethod(t *testing.T) {
 	token := "test-secret-token"
 	authMiddleware := Auth(token)
 	handler := authMiddleware(http.HandlerFunc(mockHandler))
 
-	// Test GET method
+	// Test GET method with valid auth
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
 
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Errorf("Expected status 405, got %d", w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Code)
 	}
 }
 

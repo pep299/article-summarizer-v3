@@ -176,3 +176,65 @@ func TestHandleRequest_InvalidEnv(t *testing.T) {
 		t.Errorf("Expected status 500, got %d", w.Code)
 	}
 }
+
+// TestHTTPMethodRouting tests Go 1.22 method-specific routing
+func TestHTTPMethodRouting(t *testing.T) {
+	// Set up valid environment
+	os.Setenv("GEMINI_API_KEY", "test-key")
+	os.Setenv("SLACK_BOT_TOKEN", "xoxb-test-token")
+	os.Setenv("SLACK_CHANNEL", "#test")
+	os.Setenv("WEBHOOK_AUTH_TOKEN", "test-token")
+	defer func() {
+		os.Unsetenv("GEMINI_API_KEY")
+		os.Unsetenv("SLACK_BOT_TOKEN")
+		os.Unsetenv("SLACK_CHANNEL")
+		os.Unsetenv("WEBHOOK_AUTH_TOKEN")
+	}()
+
+	handler, cleanup, err := CreateHandler()
+	if err != nil {
+		t.Fatalf("Failed to create handler: %v", err)
+	}
+	defer cleanup()
+
+	tests := []struct {
+		name           string
+		method         string
+		path           string
+		auth           bool
+		expectedStatus int
+		description    string
+	}{
+		{"Health Check GET", "GET", "/hc", false, 200, "Health check should work without auth"},
+		{"Process GET", "GET", "/process", false, 405, "GET /process should return 405"},
+		{"Process POST no auth", "POST", "/process", false, 401, "POST /process without auth should return 401"},
+		{"Process POST with auth", "POST", "/process", true, 400, "POST /process with auth should return 400 (invalid JSON)"},
+		{"Process sub-path GET", "GET", "/process/1", false, 404, "GET /process/1 should return 404"},
+		{"Process sub-path POST", "POST", "/process/1", false, 404, "POST /process/1 should return 404"},
+		{"Process DELETE", "DELETE", "/process", true, 405, "DELETE /process should return 405"},
+		{"Webhook POST with auth", "POST", "/webhook", true, 400, "POST /webhook should work with auth"},
+		{"Webhook GET", "GET", "/webhook", true, 405, "GET /webhook should return 405"},
+		{"Root GET", "GET", "/", false, 404, "GET / should return 404"},
+		{"Root POST", "POST", "/", false, 404, "POST / should return 404"},
+		{"Unknown GET", "GET", "/unknown", false, 404, "GET /unknown should return 404"},
+		{"Unknown POST", "POST", "/unknown", true, 404, "POST /unknown should return 404"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, nil)
+			if tt.auth {
+				req.Header.Set("Authorization", "Bearer test-token")
+			}
+			w := httptest.NewRecorder()
+
+			handler.ServeHTTP(w, req)
+
+			t.Logf("%s %s (auth: %v) -> %d", tt.method, tt.path, tt.auth, w.Code)
+
+			if w.Code != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d - %s", tt.expectedStatus, w.Code, tt.description)
+			}
+		})
+	}
+}
