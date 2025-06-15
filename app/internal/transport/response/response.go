@@ -46,3 +46,8 @@ func WriteBadRequest(w http.ResponseWriter, message string) error {
 func WriteInternalError(w http.ResponseWriter, message string) error {
 	return WriteError(w, http.StatusInternalServerError, message)
 }
+
+// WriteMethodNotAllowed writes a 405 Method Not Allowed error
+func WriteMethodNotAllowed(w http.ResponseWriter, message string) error {
+	return WriteError(w, http.StatusMethodNotAllowed, message)
+}

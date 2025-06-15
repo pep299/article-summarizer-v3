@@ -473,3 +473,108 @@ func TestE2E_ErrorHandling(t *testing.T) {
 
 	t.Logf("✅ Error handling test completed")
 }
+
+// TestE2E_XEndpoint tests the X endpoint with actual oEmbed API calls
+func TestE2E_XEndpoint(t *testing.T) {
+	config := loadE2EConfig()
+
+	t.Logf("🚀 Starting X endpoint E2E test")
+
+	setupE2EEnvironment(config)
+	defer cleanupE2EEnvironment()
+
+	// Create application
+	app, err := application.New()
+	if err != nil {
+		t.Fatalf("Failed to create application: %v", err)
+	}
+	defer app.Close()
+
+	// Create test server
+	server := httptest.NewServer(app.XHandler)
+	defer server.Close()
+
+	tests := []struct {
+		name           string
+		url            string
+		expectedStatus int
+		shouldHaveData bool
+	}{
+		{
+			name:           "Valid X URL",
+			url:            "https://x.com/mizchi/status/1932249213326504133",
+			expectedStatus: 200,
+			shouldHaveData: true,
+		},
+		{
+			name:           "Valid Twitter URL",
+			url:            "https://twitter.com/mizchi/status/1932249213326504133",
+			expectedStatus: 200,
+			shouldHaveData: true,
+		},
+		{
+			name:           "Invalid URL format",
+			url:            "https://facebook.com/post/123",
+			expectedStatus: 400,
+			shouldHaveData: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			reqURL := server.URL + "?url=" + tt.url
+			req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+			if err != nil {
+				t.Fatalf("Failed to create request: %v", err)
+			}
+
+			client := &http.Client{Timeout: 30 * time.Second}
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatalf("Failed to send request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d for URL %s", tt.expectedStatus, resp.StatusCode, tt.url)
+			}
+
+			if tt.shouldHaveData && resp.StatusCode == 200 {
+				var result map[string]interface{}
+				if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+					t.Fatalf("Failed to decode response: %v", err)
+				}
+
+				// Check required fields
+				requiredFields := []string{"author_name", "author_url", "text", "created_at", "url"}
+				for _, field := range requiredFields {
+					if _, exists := result[field]; !exists {
+						t.Errorf("Response should contain field '%s'", field)
+					}
+				}
+
+				// Validate content
+				if authorName, ok := result["author_name"].(string); ok && authorName != "" {
+					t.Logf("✅ Author: %s", authorName)
+				} else {
+					t.Error("author_name should be a non-empty string")
+				}
+
+				if text, ok := result["text"].(string); ok && text != "" {
+					textPreview := text
+					if len(text) > 100 {
+						textPreview = text[:100] + "..."
+					}
+					t.Logf("✅ Text: %s", textPreview)
+				} else {
+					t.Error("text should be a non-empty string")
+				}
+			}
+		})
+	}
+
+	t.Logf("✅ E2E Test passed: X endpoint with real oEmbed API")
+}

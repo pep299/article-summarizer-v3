@@ -25,7 +25,8 @@ func CreateHandler() (http.Handler, func(), error) {
 	mux := http.NewServeMux()
 	mux.Handle("POST /process", authMiddleware(app.ProcessHandler))
 	mux.Handle("POST /webhook", authMiddleware(app.WebhookHandler))
-	mux.HandleFunc("GET /hc", healthCheck) // Health check endpoint
+	mux.Handle("GET /x", authMiddleware(app.XHandler)) // X fetch endpoint (auth required)
+	mux.HandleFunc("GET /hc", healthCheck)             // Health check endpoint
 
 	// Return handler and cleanup function
 	cleanup := func() {

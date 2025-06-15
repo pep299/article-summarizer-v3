@@ -14,6 +14,7 @@ type Application struct {
 	Config         *Config
 	ProcessHandler *handler.Process
 	WebhookHandler *handler.Webhook
+	XHandler       *handler.X
 	cleanup        func() error
 }
 
@@ -40,9 +41,13 @@ func New() (*Application, error) {
 	feedService := service.NewFeed(rssRepo, processedRepo, geminiRepo, slackRepo, articleLimiter)
 	urlService := service.NewURL(geminiRepo, webhookSlackRepo)
 
+	// Create X repository
+	xRepo := repository.NewXClient()
+
 	// Create handlers (HTTP layer)
 	processHandler := handler.NewProcess(feedService)
 	webhookHandler := handler.NewWebhook(urlService)
+	xHandler := handler.NewX(xRepo)
 
 	// Cleanup function
 	cleanup := func() error {
@@ -56,6 +61,7 @@ func New() (*Application, error) {
 		Config:         cfg,
 		ProcessHandler: processHandler,
 		WebhookHandler: webhookHandler,
+		XHandler:       xHandler,
 		cleanup:        cleanup,
 	}, nil
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
 
@@ -9,7 +10,12 @@ import (
 )
 
 func main() {
-	if err := funcframework.Start("8080"); err != nil {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	if err := funcframework.Start(port); err != nil {
 		log.Fatalf("funcframework.Start: %v\n", err)
 	}
 }
