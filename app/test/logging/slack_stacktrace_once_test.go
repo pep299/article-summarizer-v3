@@ -69,10 +69,10 @@ func TestSlackStackTrace_OnceOnly(t *testing.T) {
 	}{
 		{
 			name:        "process_slack_error",
-			handler:     app.ProcessHandler,
-			requestBody: `{"feedName": "hatena"}`,
-			endpoint:    "/",
-			description: "Process flow Slack error should produce stack trace from slack.go",
+			handler:     app.HatenaHandler,
+			requestBody: ``,
+			endpoint:    "/process/hatena",
+			description: "Hatena process flow Slack error should produce stack trace from slack.go",
 		},
 		{
 			name:        "webhook_slack_error",

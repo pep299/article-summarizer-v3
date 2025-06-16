@@ -11,10 +11,12 @@ import (
 
 // Application represents the application with all business logic components
 type Application struct {
-	Config         *Config
-	ProcessHandler *handler.Process
-	WebhookHandler *handler.Webhook
-	cleanup        func() error
+	Config          *Config
+	WebhookHandler  *handler.Webhook
+	HatenaHandler   *handler.HatenaHandler
+	RedditHandler   *handler.RedditHandler
+	LobstersHandler *handler.LobstersHandler
+	cleanup         func() error
 }
 
 // New creates a new application instance with all dependencies
@@ -37,12 +39,13 @@ func New() (*Application, error) {
 
 	// Create services (business logic) - use production limiter by default
 	articleLimiter := limiter.NewProductionArticleLimiter()
-	feedService := service.NewFeed(rssRepo, processedRepo, geminiRepo, slackRepo, articleLimiter)
 	urlService := service.NewURL(geminiRepo, webhookSlackRepo)
 
 	// Create handlers (HTTP layer)
-	processHandler := handler.NewProcess(feedService)
 	webhookHandler := handler.NewWebhook(urlService)
+	hatenaHandler := handler.NewHatenaHandler(rssRepo, geminiRepo, slackRepo, processedRepo, articleLimiter)
+	redditHandler := handler.NewRedditHandler(rssRepo, geminiRepo, slackRepo, processedRepo, articleLimiter)
+	lobstersHandler := handler.NewLobstersHandler(rssRepo, geminiRepo, slackRepo, processedRepo, articleLimiter)
 
 	// Cleanup function
 	cleanup := func() error {
@@ -53,10 +56,12 @@ func New() (*Application, error) {
 	}
 
 	return &Application{
-		Config:         cfg,
-		ProcessHandler: processHandler,
-		WebhookHandler: webhookHandler,
-		cleanup:        cleanup,
+		Config:          cfg,
+		WebhookHandler:  webhookHandler,
+		HatenaHandler:   hatenaHandler,
+		RedditHandler:   redditHandler,
+		LobstersHandler: lobstersHandler,
+		cleanup:         cleanup,
 	}, nil
 }
 

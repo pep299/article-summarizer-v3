@@ -23,10 +23,14 @@ type SummarizeResponse struct {
 }
 
 type GeminiRepository interface {
+	// Legacy methods for backward compatibility
 	SummarizeURL(ctx context.Context, url string) (*SummarizeResponse, error)
 	SummarizeURLForOnDemand(ctx context.Context, url string) (*SummarizeResponse, error)
 	SummarizeText(ctx context.Context, text string) (string, error)
-	SummarizeComments(ctx context.Context, commentsText string) (string, error)
+
+	// New unified methods for article processing service
+	SummarizeComments(ctx context.Context, text string) (*SummarizeResponse, error)
+	SummarizeOnDemand(ctx context.Context, url string) (*SummarizeResponse, error)
 }
 
 type geminiRepository struct {
@@ -333,12 +337,12 @@ func (g *geminiRepository) buildOnDemandPrompt(textContent string) string {
 // SummarizeText summarizes the provided text content directly
 func (g *geminiRepository) SummarizeText(ctx context.Context, text string) (string, error) {
 	logger := log.New(funcframework.LogWriter(ctx), "", 0)
-	
+
 	// Build prompt for text summarization (using detailed on-demand format)
 	prompt := g.buildOnDemandPrompt(text)
-	
+
 	logger.Printf("Text summarization started text_length=%d", len(text))
-	
+
 	// Call Gemini API
 	geminiStart := time.Now()
 	summary, err := g.callGeminiAPI(ctx, prompt)
@@ -346,36 +350,39 @@ func (g *geminiRepository) SummarizeText(ctx context.Context, text string) (stri
 		logger.Printf("Error calling Gemini API for text summarization: %v", err)
 		return "", fmt.Errorf("calling Gemini API: %w", err)
 	}
-	
+
 	geminiDuration := time.Since(geminiStart)
-	logger.Printf("Text summarization completed summary_length=%d duration_ms=%d", 
+	logger.Printf("Text summarization completed summary_length=%d duration_ms=%d",
 		len(summary), geminiDuration.Milliseconds())
-	
+
 	return summary, nil
 }
 
 // SummarizeComments summarizes comments/discussions using specialized prompt
-func (g *geminiRepository) SummarizeComments(ctx context.Context, commentsText string) (string, error) {
+func (g *geminiRepository) SummarizeComments(ctx context.Context, commentsText string) (*SummarizeResponse, error) {
 	logger := log.New(funcframework.LogWriter(ctx), "", 0)
-	
+
 	// Build specialized prompt for comments
 	prompt := g.buildCommentsPrompt(commentsText)
-	
+
 	logger.Printf("Comments summarization started text_length=%d", len(commentsText))
-	
+
 	// Call Gemini API
 	geminiStart := time.Now()
 	summary, err := g.callGeminiAPI(ctx, prompt)
 	if err != nil {
 		logger.Printf("Error calling Gemini API for comments summarization: %v", err)
-		return "", fmt.Errorf("calling Gemini API: %w", err)
+		return nil, fmt.Errorf("calling Gemini API: %w", err)
 	}
-	
+
 	geminiDuration := time.Since(geminiStart)
-	logger.Printf("Comments summarization completed summary_length=%d duration_ms=%d", 
+	logger.Printf("Comments summarization completed summary_length=%d duration_ms=%d",
 		len(summary), geminiDuration.Milliseconds())
-	
-	return summary, nil
+
+	return &SummarizeResponse{
+		Summary:     summary,
+		ProcessedAt: time.Now(),
+	}, nil
 }
 
 // buildCommentsPrompt creates specialized prompt for comments/discussions
@@ -401,4 +408,11 @@ func (g *geminiRepository) buildCommentsPrompt(commentsText string) string {
 
 コメント内容:
 %s`, commentsText)
+}
+
+// New unified methods for article processing service
+
+func (g *geminiRepository) SummarizeOnDemand(ctx context.Context, url string) (*SummarizeResponse, error) {
+	// Use existing SummarizeURLForOnDemand method
+	return g.SummarizeURLForOnDemand(ctx, url)
 }

@@ -1,4 +1,4 @@
-package feed
+package rss
 
 import (
 	"context"
@@ -14,16 +14,16 @@ import (
 
 // RedditComment represents a Reddit comment
 type RedditComment struct {
-	Body      string  `json:"body"`
-	Author    string  `json:"author"`
-	Score     int     `json:"score"`
-	CreatedUTC float64 `json:"created_utc"`
-	Replies   *RedditCommentListing `json:"replies,omitempty"`
+	Body       string                `json:"body"`
+	Author     string                `json:"author"`
+	Score      int                   `json:"score"`
+	CreatedUTC float64               `json:"created_utc"`
+	Replies    *RedditCommentListing `json:"replies,omitempty"`
 }
 
 // RedditCommentData wraps comment data
 type RedditCommentData struct {
-	Kind string `json:"kind"`
+	Kind string      `json:"kind"`
 	Data interface{} `json:"data"`
 }
 
@@ -38,31 +38,70 @@ type RedditCommentListing struct {
 // RedditAPIResponse represents the structure of Reddit JSON API response
 type RedditAPIResponse []RedditCommentListing
 
-// RedditStrategy implements strategy for Reddit RSS feed
-type RedditStrategy struct{}
-
-func NewRedditStrategy() *RedditStrategy {
-	return &RedditStrategy{}
+type RedditRSSRepository struct {
+	rssRepo repository.RSSRepository
 }
 
-func (r *RedditStrategy) GetConfig() FeedConfig {
-	return FeedConfig{
-		Name:        "reddit",
-		URL:         "https://www.reddit.com/r/programming/.rss",
-		DisplayName: "Reddit r/programming",
+func NewRedditRSSRepository(rssRepo repository.RSSRepository) *RedditRSSRepository {
+	return &RedditRSSRepository{
+		rssRepo: rssRepo,
 	}
 }
 
-func (r *RedditStrategy) FilterItems(items []repository.Item) []repository.Item {
-	return items
+func (r *RedditRSSRepository) FetchArticles(ctx context.Context) ([]repository.Item, error) {
+	url := "https://www.reddit.com/r/programming/.rss"
+	headers := map[string]string{
+		"User-Agent": "Article Summarizer Bot/1.0 (Reddit)",
+		"Accept":     "application/rss+xml, application/xml, text/xml",
+	}
+
+	xmlContent, err := r.rssRepo.FetchFeedXML(ctx, url, headers)
+	if err != nil {
+		return nil, fmt.Errorf("fetching Reddit RSS: %w", err)
+	}
+
+	return r.parseFeed(xmlContent)
 }
 
-func (r *RedditStrategy) ParseFeed(xmlContent string) ([]repository.Item, error) {
+func (r *RedditRSSRepository) FetchComments(ctx context.Context, commentURL string) (*Comments, error) {
+	// Convert Reddit post URL to JSON API URL with sort=top parameter
+	jsonURL := strings.Replace(commentURL, "reddit.com", "reddit.com", 1) + ".json?sort=top&limit=100"
+
+	// Set headers for JSON API access
+	headers := map[string]string{
+		"User-Agent": "RedditCommentSummarizer/1.0",
+		"Accept":     "application/json",
+	}
+
+	// Fetch JSON data
+	jsonContent, err := r.rssRepo.FetchFeedXML(ctx, jsonURL, headers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Reddit comments: %w", err)
+	}
+
+	// Parse JSON response
+	var apiResponse RedditAPIResponse
+	if err := json.Unmarshal([]byte(jsonContent), &apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse Reddit JSON response: %w", err)
+	}
+
+	// Extract comments (skip the first element which is the post itself)
+	if len(apiResponse) < 2 {
+		return nil, fmt.Errorf("unexpected Reddit API response structure")
+	}
+
+	comments := r.extractCommentsFromListing(&apiResponse[1])
+	combinedText := r.combineCommentsText(comments)
+
+	return &Comments{Text: combinedText}, nil
+}
+
+func (r *RedditRSSRepository) parseFeed(xmlContent string) ([]repository.Item, error) {
 	// Reddit uses Atom format
 	var atomFeed struct {
 		Entries []struct {
-			Title   string `xml:"title"`
-			Link    struct {
+			Title string `xml:"title"`
+			Link  struct {
 				Href string `xml:"href,attr"`
 			} `xml:"link"`
 			Content string `xml:"content"`
@@ -78,22 +117,25 @@ func (r *RedditStrategy) ParseFeed(xmlContent string) ([]repository.Item, error)
 	var items []repository.Item
 	for _, entry := range atomFeed.Entries {
 		redditURL := entry.Link.Href
-		
+
 		// Extract external URL from Reddit post content
-		externalURL := r.ExtractExternalURL(entry.Content)
-		
+		externalURL := r.extractExternalURL(entry.Content)
+
 		// Extract external URL, fallback to reddit URL
 		linkURL := externalURL
 		if linkURL == "" {
 			linkURL = redditURL
 		}
-		
+
+		parsedDate, _ := r.parseDate(entry.Updated)
+
 		item := repository.Item{
 			Title:       entry.Title,
 			Link:        linkURL,
 			Description: entry.Content,
 			PubDate:     entry.Updated,
 			GUID:        entry.ID,
+			ParsedDate:  parsedDate,
 			Source:      "reddit",
 			CommentURL:  redditURL,
 		}
@@ -104,34 +146,7 @@ func (r *RedditStrategy) ParseFeed(xmlContent string) ([]repository.Item, error)
 	return items, nil
 }
 
-func (r *RedditStrategy) GetRequestHeaders() map[string]string {
-	return map[string]string{
-		"User-Agent": "Article Summarizer Bot/1.0 (Reddit)",
-		"Accept":     "application/rss+xml, application/xml, text/xml",
-	}
-}
-
-func (r *RedditStrategy) ParseDate(dateStr string) (time.Time, error) {
-	// Reddit Atom uses RFC3339 format
-	formats := []string{
-		time.RFC3339, // Atom standard
-		"2006-01-02T15:04:05Z",
-		"2006-01-02T15:04:05-07:00",
-		time.RFC1123Z, // Fallback
-		time.RFC1123,
-	}
-
-	for _, format := range formats {
-		if t, err := time.Parse(format, dateStr); err == nil {
-			return t, nil
-		}
-	}
-
-	return time.Time{}, fmt.Errorf("unable to parse Reddit date: %s", dateStr)
-}
-
-// ExtractExternalURL extracts the actual article URL from Reddit post content
-func (r *RedditStrategy) ExtractExternalURL(content string) string {
+func (r *RedditRSSRepository) extractExternalURL(content string) string {
 	// Regex to find URLs in the Reddit post content
 	// Look for [link] tags that contain the actual article URL
 	linkRegex := regexp.MustCompile(`<span><a href="([^"]+)"[^>]*>\[link\]</a></span>`)
@@ -157,40 +172,27 @@ func (r *RedditStrategy) ExtractExternalURL(content string) string {
 	return ""
 }
 
-// FetchComments fetches comments from a Reddit post URL
-func (r *RedditStrategy) FetchComments(ctx context.Context, postURL string, rssRepo repository.RSSRepository) ([]RedditComment, error) {
-	// Convert Reddit post URL to JSON API URL with sort=top parameter
-	jsonURL := strings.Replace(postURL, "reddit.com", "reddit.com", 1) + ".json?sort=top&limit=100"
-	
-	// Set headers for JSON API access
-	headers := map[string]string{
-		"User-Agent": "RedditCommentSummarizer/1.0",
-		"Accept":     "application/json",
+func (r *RedditRSSRepository) parseDate(dateStr string) (time.Time, error) {
+	// Reddit Atom uses RFC3339 format
+	formats := []string{
+		time.RFC3339, // Atom standard
+		"2006-01-02T15:04:05Z",
+		"2006-01-02T15:04:05-07:00",
+		time.RFC1123Z, // Fallback
+		time.RFC1123,
 	}
 
-	// Fetch JSON data
-	jsonContent, err := rssRepo.FetchFeedXML(ctx, jsonURL, headers)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch Reddit comments: %w", err)
+	for _, format := range formats {
+		if t, err := time.Parse(format, dateStr); err == nil {
+			return t, nil
+		}
 	}
 
-	// Parse JSON response
-	var apiResponse RedditAPIResponse
-	if err := json.Unmarshal([]byte(jsonContent), &apiResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse Reddit JSON response: %w", err)
-	}
-
-	// Extract comments (skip the first element which is the post itself)
-	if len(apiResponse) < 2 {
-		return nil, fmt.Errorf("unexpected Reddit API response structure")
-	}
-
-	comments := r.extractCommentsFromListing(&apiResponse[1])
-	return comments, nil
+	return time.Time{}, fmt.Errorf("unable to parse Reddit date: %s", dateStr)
 }
 
 // extractCommentsFromListing recursively extracts comments from Reddit API response
-func (r *RedditStrategy) extractCommentsFromListing(listing *RedditCommentListing) []RedditComment {
+func (r *RedditRSSRepository) extractCommentsFromListing(listing *RedditCommentListing) []RedditComment {
 	var comments []RedditComment
 
 	for _, child := range listing.Data.Children {
@@ -224,21 +226,21 @@ func (r *RedditStrategy) extractCommentsFromListing(listing *RedditCommentListin
 	return comments
 }
 
-// CombineCommentsText combines all comment texts into a single string for summarization
-func (r *RedditStrategy) CombineCommentsText(comments []RedditComment) string {
+// combineCommentsText combines all comment texts into a single string for summarization
+func (r *RedditRSSRepository) combineCommentsText(comments []RedditComment) string {
 	var parts []string
 	totalLength := 0
 	const maxLength = 10000 // 10KB limit
 
 	// Reddit API with sort=top provides score-sorted comments
 	for _, comment := range comments {
-		commentText := fmt.Sprintf("[Score: %d] %s: %s", 
+		commentText := fmt.Sprintf("[Score: %d] %s: %s",
 			comment.Score, comment.Author, comment.Body)
-		
-		if totalLength + len(commentText) + 2 > maxLength {
+
+		if totalLength+len(commentText)+2 > maxLength {
 			break
 		}
-		
+
 		parts = append(parts, commentText)
 		totalLength += len(commentText) + 2
 	}

@@ -14,7 +14,6 @@ import (
 
 	"github.com/pep299/article-summarizer-v3/internal/application"
 	"github.com/pep299/article-summarizer-v3/internal/repository"
-	"github.com/pep299/article-summarizer-v3/internal/service"
 	"github.com/pep299/article-summarizer-v3/internal/service/limiter"
 	"github.com/pep299/article-summarizer-v3/internal/transport/handler"
 )
@@ -73,7 +72,7 @@ func cleanupE2EEnvironment() {
 }
 
 // createTestApplication creates application with test article limiter.
-func createTestApplication() (*application.Application, *handler.Process, error) {
+func createTestApplication() (*application.Application, *handler.HatenaHandler, error) {
 	// Load configuration
 	cfg, err := application.Load()
 	if err != nil {
@@ -91,18 +90,21 @@ func createTestApplication() (*application.Application, *handler.Process, error)
 
 	// Create services with test limiter
 	testLimiter := limiter.NewTestArticleLimiter()
-	feedService := service.NewFeed(rssRepo, processedRepo, geminiRepo, slackRepo, testLimiter)
 
 	// Create handlers
-	processHandler := handler.NewProcess(feedService)
+	hatenaHandler := handler.NewHatenaHandler(rssRepo, geminiRepo, slackRepo, processedRepo, testLimiter)
+	redditHandler := handler.NewRedditHandler(rssRepo, geminiRepo, slackRepo, processedRepo, testLimiter)
+	lobstersHandler := handler.NewLobstersHandler(rssRepo, geminiRepo, slackRepo, processedRepo, testLimiter)
 
 	// Create mock application for cleanup
 	app := &application.Application{
-		Config:         cfg,
-		ProcessHandler: processHandler,
+		Config:          cfg,
+		HatenaHandler:   hatenaHandler,
+		RedditHandler:   redditHandler,
+		LobstersHandler: lobstersHandler,
 	}
 
-	return app, processHandler, nil
+	return app, hatenaHandler, nil
 }
 
 // GCSヘルパー関数.
@@ -216,30 +218,21 @@ func TestE2E_HatenaRSSToSlack(t *testing.T) {
 	defer cleanupE2EEnvironment()
 
 	// Create application with test limiter
-	app, processHandler, err := createTestApplication()
+	app, _, err := createTestApplication()
 	if err != nil {
 		t.Fatalf("Failed to create test application: %v", err)
 	}
 	defer app.Close()
 
-	// Create test server
-	server := httptest.NewServer(processHandler)
+	// Create test server for Hatena processing
+	server := httptest.NewServer(app.HatenaHandler)
 	defer server.Close()
 
-	// Test Hatena RSS processing
-	requestBody := map[string]string{
-		"feedName": "hatena",
-	}
-
-	jsonData, err := json.Marshal(requestBody)
-	if err != nil {
-		t.Fatalf("Failed to marshal request: %v", err)
-	}
-
+	// Test Hatena RSS processing (no request body needed)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "POST", server.URL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", server.URL, nil)
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
@@ -288,30 +281,22 @@ func TestE2E_LobstersRSSToSlack(t *testing.T) {
 	defer cleanupE2EEnvironment()
 
 	// Create application with test limiter
-	app, processHandler, err := createTestApplication()
+	app, _, err := createTestApplication()
 	if err != nil {
 		t.Fatalf("Failed to create test application: %v", err)
 	}
 	defer app.Close()
 
-	// Create test server
-	server := httptest.NewServer(processHandler)
+	// Create test server for Lobsters processing
+	server := httptest.NewServer(app.LobstersHandler)
 	defer server.Close()
 
-	// Test Lobsters RSS processing
-	requestBody := map[string]string{
-		"feedName": "lobsters",
-	}
-
-	jsonData, err := json.Marshal(requestBody)
-	if err != nil {
-		t.Fatalf("Failed to marshal request: %v", err)
-	}
+	// Test Lobsters RSS processing (no request body needed)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "POST", server.URL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", server.URL, nil)
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
@@ -360,30 +345,22 @@ func TestE2E_RedditRSSToSlack(t *testing.T) {
 	defer cleanupE2EEnvironment()
 
 	// Create application with test limiter
-	app, processHandler, err := createTestApplication()
+	app, _, err := createTestApplication()
 	if err != nil {
 		t.Fatalf("Failed to create test application: %v", err)
 	}
 	defer app.Close()
 
-	// Create test server
-	server := httptest.NewServer(processHandler)
+	// Create test server for Reddit processing
+	server := httptest.NewServer(app.RedditHandler)
 	defer server.Close()
 
-	// Test Reddit RSS processing
-	requestBody := map[string]string{
-		"feedName": "reddit",
-	}
-
-	jsonData, err := json.Marshal(requestBody)
-	if err != nil {
-		t.Fatalf("Failed to marshal request: %v", err)
-	}
+	// Test Reddit RSS processing (no request body needed)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute) // Reddit processing takes longer
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "POST", server.URL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", server.URL, nil)
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
@@ -512,20 +489,12 @@ func TestE2E_ErrorHandling(t *testing.T) {
 	}
 	defer app.Close()
 
-	// Test invalid feed name
-	server := httptest.NewServer(app.ProcessHandler)
+	// Test Hatena processing (HatenaHandler doesn't need feedName parameter)
+	server := httptest.NewServer(app.HatenaHandler)
 	defer server.Close()
 
-	invalidRequest := map[string]string{
-		"feedName": "invalid-feed",
-	}
-
-	jsonData, err := json.Marshal(invalidRequest)
-	if err != nil {
-		t.Fatalf("Failed to marshal request: %v", err)
-	}
-
-	req, err := http.NewRequest("POST", server.URL, bytes.NewBuffer(jsonData))
+	// No request body needed for Hatena handler
+	req, err := http.NewRequest("POST", server.URL, nil)
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
