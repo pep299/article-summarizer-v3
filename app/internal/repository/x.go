@@ -25,6 +25,9 @@ type Client interface {
 	// FetchPost extracts post data from the given URL
 	FetchPost(ctx context.Context, url string) (*PostData, error)
 
+	// FetchQuoteChain fetches a chain of quoted posts starting from the given URL
+	FetchQuoteChain(ctx context.Context, url string) ([]PostData, error)
+
 	// IsSupported checks if the client supports the given URL
 	IsSupported(url string) bool
 }
@@ -129,6 +132,104 @@ func (x *XClient) callOEmbedAPI(ctx context.Context, postURL string) (*oEmbedRes
 	}
 
 	return &oembedResp, nil
+}
+
+// FetchQuoteChain fetches a chain of quoted posts starting from the given URL
+func (x *XClient) FetchQuoteChain(ctx context.Context, startURL string) ([]PostData, error) {
+	if !x.IsSupported(startURL) {
+		return nil, fmt.Errorf("unsupported URL format: %s", startURL)
+	}
+
+	var chain []PostData
+	currentURL := startURL
+	visited := make(map[string]bool)
+
+	// Maximum depth to prevent infinite loops
+	maxDepth := 10
+
+	for i := 0; i < maxDepth && currentURL != "" && !visited[currentURL]; i++ {
+		visited[currentURL] = true
+
+		// Get oEmbed data for current URL
+		oembedResp, err := x.callOEmbedAPI(ctx, currentURL)
+		if err != nil {
+			// If we can't get this tweet, break the chain
+			break
+		}
+
+		// Extract text and create PostData
+		text, err := x.extractTextFromHTML(oembedResp.HTML)
+		if err != nil {
+			text = "" // Continue with empty text if extraction fails
+		}
+
+		createdAt, err := x.extractCreatedAtFromHTML(oembedResp.HTML)
+		if err != nil {
+			createdAt = time.Now() // Fallback to current time
+		}
+
+		postData := PostData{
+			AuthorName: oembedResp.AuthorName,
+			AuthorURL:  oembedResp.AuthorURL,
+			Text:       text,
+			CreatedAt:  createdAt,
+			URL:        oembedResp.URL,
+		}
+
+		// Add to beginning of chain (so final result is chronological order)
+		chain = append([]PostData{postData}, chain...)
+
+		// Extract t.co URL from HTML
+		tcoURL := x.extractTcoURL(oembedResp.HTML)
+		if tcoURL == "" {
+			break
+		}
+
+		// Expand t.co URL to get actual tweet URL
+		expandedURL, err := x.expandTcoURL(ctx, tcoURL)
+		if err != nil {
+			// If expansion fails, break the chain
+			break
+		}
+
+		currentURL = expandedURL
+	}
+
+	return chain, nil
+}
+
+// extractTcoURL extracts t.co URL from HTML
+func (x *XClient) extractTcoURL(html string) string {
+	tcoPattern := regexp.MustCompile(`https://t\.co/[a-zA-Z0-9]+`)
+	return tcoPattern.FindString(html)
+}
+
+// expandTcoURL expands a t.co URL to get the actual URL
+func (x *XClient) expandTcoURL(ctx context.Context, tcoURL string) (string, error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", tcoURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to expand t.co URL: %w", err)
+	}
+	defer resp.Body.Close()
+
+	location := resp.Header.Get("Location")
+	if location == "" {
+		return "", fmt.Errorf("no redirect found for t.co URL")
+	}
+
+	return location, nil
 }
 
 // extractTextFromHTML extracts the tweet text from the oEmbed HTML

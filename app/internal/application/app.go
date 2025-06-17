@@ -11,11 +11,12 @@ import (
 
 // Application represents the application with all business logic components
 type Application struct {
-	Config         *Config
-	ProcessHandler *handler.Process
-	WebhookHandler *handler.Webhook
-	XHandler       *handler.X
-	cleanup        func() error
+	Config             *Config
+	ProcessHandler     *handler.Process
+	WebhookHandler     *handler.Webhook
+	XHandler           *handler.X
+	XQuoteChainHandler *handler.XQuoteChain
+	cleanup            func() error
 }
 
 // New creates a new application instance with all dependencies
@@ -48,6 +49,7 @@ func New() (*Application, error) {
 	processHandler := handler.NewProcess(feedService)
 	webhookHandler := handler.NewWebhook(urlService)
 	xHandler := handler.NewX(xRepo)
+	xQuoteChainHandler := handler.NewXQuoteChain(xRepo)
 
 	// Cleanup function
 	cleanup := func() error {
@@ -58,11 +60,12 @@ func New() (*Application, error) {
 	}
 
 	return &Application{
-		Config:         cfg,
-		ProcessHandler: processHandler,
-		WebhookHandler: webhookHandler,
-		XHandler:       xHandler,
-		cleanup:        cleanup,
+		Config:             cfg,
+		ProcessHandler:     processHandler,
+		WebhookHandler:     webhookHandler,
+		XHandler:           xHandler,
+		XQuoteChainHandler: xQuoteChainHandler,
+		cleanup:            cleanup,
 	}, nil
 }
 
