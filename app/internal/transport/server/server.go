@@ -23,7 +23,10 @@ func CreateHandler() (http.Handler, func(), error) {
 
 	// Setup routes (pure HTTP routing)
 	mux := http.NewServeMux()
-	mux.Handle("POST /process", authMiddleware(app.ProcessHandler))
+	// Feed-specific endpoints
+	mux.Handle("POST /process/hatena", authMiddleware(app.HatenaHandler))
+	mux.Handle("POST /process/reddit", authMiddleware(app.RedditHandler))
+	mux.Handle("POST /process/lobsters", authMiddleware(app.LobstersHandler))
 	mux.Handle("POST /webhook", authMiddleware(app.WebhookHandler))
 	mux.Handle("GET /x", authMiddleware(app.XHandler)) // X fetch endpoint (auth required)
 	mux.HandleFunc("GET /hc", healthCheck)             // Health check endpoint

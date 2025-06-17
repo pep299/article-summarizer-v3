@@ -36,8 +36,8 @@ func TestIntegration_FullPipeline_MockedServices(t *testing.T) {
 		t.Error("Expected config to be loaded")
 	}
 
-	if app.ProcessHandler == nil {
-		t.Error("Expected process handler to be created")
+	if app.HatenaHandler == nil {
+		t.Error("Expected hatena handler to be created")
 	}
 
 	if app.WebhookHandler == nil {

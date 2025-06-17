@@ -84,9 +84,9 @@ func TestRSSStackTrace_OnceOnly(t *testing.T) {
 	}{
 		{
 			name:                "rss_network_error",
-			handler:             app.ProcessHandler,
-			requestBody:         `{"feedName": "hatena"}`,
-			endpoint:            "/",
+			handler:             app.HatenaHandler,
+			requestBody:         ``,
+			endpoint:            "/process/hatena",
 			expectedStackTraces: 1, // RSS fetch network errorで1回だけ
 			description:         "RSS feed network error should produce exactly 1 stack trace",
 			errorPattern:        "Error making HTTP request to RSS feed",
@@ -228,7 +228,7 @@ func TestRSSStatusCodeError_OnceOnly(t *testing.T) {
 	os.Stderr = w2
 
 	// Execute request
-	app.ProcessHandler.ServeHTTP(w, req)
+	app.HatenaHandler.ServeHTTP(w, req)
 
 	// Close pipe and restore stderr
 	w2.Close()

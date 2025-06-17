@@ -72,9 +72,9 @@ func TestGeminiStackTrace_OnceOnly(t *testing.T) {
 	}{
 		{
 			name:         "gemini_external_error",
-			handler:      app.ProcessHandler,
-			requestBody:  `{"feedName": "hatena"}`,
-			endpoint:     "/",
+			handler:      app.HatenaHandler,
+			requestBody:  ``,
+			endpoint:     "/process/hatena",
 			description:  "Gemini API external factor error should produce exactly 1 stack trace",
 			errorPattern: "Gemini API request failed",
 		},
@@ -213,9 +213,9 @@ func TestGeminiAPI400Error_ProcessingStops(t *testing.T) {
 	}{
 		{
 			name:           "gemini_400_stops_processing",
-			handler:        app.ProcessHandler,
-			requestBody:    `{"feedName": "hatena"}`,
-			endpoint:       "/",
+			handler:        app.HatenaHandler,
+			requestBody:    ``,
+			endpoint:       "/process/hatena",
 			expectedStatus: http.StatusInternalServerError, // 400エラーが500として上がってくる
 			description:    "Gemini 400 error should stop processing and return error",
 			checkPattern:   "API key not valid", // Geminiの400エラーメッセージ
@@ -314,7 +314,7 @@ func TestGeminiAPI400Error_StackTraceOnce(t *testing.T) {
 	os.Stderr = w2
 
 	// Execute request
-	app.ProcessHandler.ServeHTTP(w, req)
+	app.HatenaHandler.ServeHTTP(w, req)
 
 	// Close pipe and restore stderr
 	w2.Close()
@@ -407,7 +407,7 @@ func TestGeminiStackTrace_NoDuplication(t *testing.T) {
 	os.Stderr = w2
 
 	// Execute request
-	app.ProcessHandler.ServeHTTP(w, req)
+	app.HatenaHandler.ServeHTTP(w, req)
 
 	// Close pipe and restore stderr
 	w2.Close()

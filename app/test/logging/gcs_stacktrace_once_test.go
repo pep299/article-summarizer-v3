@@ -97,7 +97,7 @@ func TestGCSStackTrace_OnceOnly(t *testing.T) {
 	os.Stderr = w2
 
 	// Execute request
-	app.ProcessHandler.ServeHTTP(w, req)
+	app.HatenaHandler.ServeHTTP(w, req)
 
 	// Close pipe and restore stderr
 	w2.Close()

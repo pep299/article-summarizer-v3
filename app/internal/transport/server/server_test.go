@@ -206,12 +206,11 @@ func TestHTTPMethodRouting(t *testing.T) {
 		description    string
 	}{
 		{"Health Check GET", "GET", "/hc", false, 200, "Health check should work without auth"},
-		{"Process GET", "GET", "/process", false, 405, "GET /process should return 405"},
-		{"Process POST no auth", "POST", "/process", false, 401, "POST /process without auth should return 401"},
-		{"Process POST with auth", "POST", "/process", true, 400, "POST /process with auth should return 400 (invalid JSON)"},
-		{"Process sub-path GET", "GET", "/process/1", false, 404, "GET /process/1 should return 404"},
-		{"Process sub-path POST", "POST", "/process/1", false, 404, "POST /process/1 should return 404"},
-		{"Process DELETE", "DELETE", "/process", true, 405, "DELETE /process should return 405"},
+		{"Hatena POST with auth", "POST", "/process/hatena", true, 500, "POST /process/hatena should return 500 (API key invalid in test)"},
+		{"Reddit POST with auth", "POST", "/process/reddit", true, 500, "POST /process/reddit should return 500 (API key invalid in test)"},
+		{"Lobsters POST with auth", "POST", "/process/lobsters", true, 500, "POST /process/lobsters should return 500 (API key invalid in test)"},
+		{"Hatena POST no auth", "POST", "/process/hatena", false, 401, "POST /process/hatena without auth should return 401"},
+		{"Hatena GET", "GET", "/process/hatena", false, 405, "GET /process/hatena should return 405"},
 		{"Webhook POST with auth", "POST", "/webhook", true, 400, "POST /webhook should work with auth"},
 		{"Webhook GET", "GET", "/webhook", true, 405, "GET /webhook should return 405"},
 		{"X GET no auth", "GET", "/x", false, 401, "GET /x without auth should return 401"},
