@@ -69,7 +69,7 @@ func (r *RedditRSSRepository) FetchComments(ctx context.Context, commentURL stri
 
 	// Set headers for JSON API access
 	headers := map[string]string{
-		"User-Agent": "RedditCommentSummarizer/1.0",
+		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
 		"Accept":     "application/json",
 	}
 
