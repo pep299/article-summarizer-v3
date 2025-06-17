@@ -71,8 +71,15 @@ func (r *rssRepository) FetchFeedXML(ctx context.Context, url string, headers ma
 
 	if resp.StatusCode != http.StatusOK {
 		responseBody, _ := io.ReadAll(resp.Body)
+
+		// Limit response body size for logging (first 1000 chars)
+		responseBodyStr := string(responseBody)
+		if len(responseBodyStr) > 1000 {
+			responseBodyStr = responseBodyStr[:1000] + "...[truncated]"
+		}
+
 		logger.Printf("RSS feed request failed url=%s status_code=%d request_headers=%v response_headers=%v response_body=%s\nStack:\n%s",
-			url, resp.StatusCode, req.Header, resp.Header, string(responseBody), debug.Stack())
+			url, resp.StatusCode, req.Header, resp.Header, responseBodyStr, debug.Stack())
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 

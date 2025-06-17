@@ -7,7 +7,9 @@ import (
 )
 
 // Mock RSS Repository
-type MockRSSRepo struct{}
+type MockRSSRepo struct {
+	Articles []repository.Item
+}
 
 func (m *MockRSSRepo) FetchFeedXML(ctx context.Context, url string, headers map[string]string) (string, error) {
 	// Return empty RSS feed

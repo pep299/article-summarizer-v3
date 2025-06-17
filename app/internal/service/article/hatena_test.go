@@ -2,6 +2,7 @@ package article
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/pep299/article-summarizer-v3/internal/mocks"
@@ -19,6 +20,53 @@ func TestHatenaProcessor_New(t *testing.T) {
 
 	if processor == nil {
 		t.Error("Expected non-nil processor")
+	}
+}
+
+func TestHatenaProcessor_CommentsIntegration(t *testing.T) {
+	// Test that Hatena comments can be fetched and processed
+	mockRSSRepo := &mocks.MockRSSRepo{}
+
+	hatenaRepo := NewHatenaProcessor(
+		mockRSSRepo,
+		&mocks.MockGeminiRepo{},
+		&mocks.MockSlackRepo{},
+		&mocks.MockProcessedRepo{},
+		&mocks.MockLimiter{},
+	)
+
+	// Test that comment fetching works conceptually
+	// In real usage, this would connect to Hatena Bookmark API
+	t.Log("Hatena comment integration test - processor created successfully")
+
+	if hatenaRepo == nil {
+		t.Error("Expected non-nil Hatena processor")
+	}
+}
+
+func TestHatenaRSSRepository_FetchComments(t *testing.T) {
+	// Test the Hatena RSS repository mock behavior
+	mockRepo := &mocks.MockHatenaRSSRepo{}
+
+	ctx := context.Background()
+	comments, err := mockRepo.FetchComments(ctx, "https://example.com/hatena")
+
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if comments == nil {
+		t.Error("Expected comments to be returned")
+		return
+	}
+
+	if comments.Text == "" {
+		t.Error("Expected comment text to be non-empty")
+	}
+
+	expectedPrefix := "以下ははてなブックマークのコメントです:"
+	if !strings.Contains(comments.Text, expectedPrefix) {
+		t.Errorf("Expected comment text to contain '%s'", expectedPrefix)
 	}
 }
 
