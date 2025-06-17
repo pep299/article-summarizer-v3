@@ -64,13 +64,15 @@ func (r *rssRepository) FetchFeedXML(ctx context.Context, url string, headers ma
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
-		logger.Printf("Error making HTTP request to RSS feed %s: %v\nStack:\n%s", url, err, debug.Stack())
+		logger.Printf("Error making HTTP request to RSS feed %s: %v request_headers=%v\nStack:\n%s", url, err, req.Header, debug.Stack())
 		return "", fmt.Errorf("fetching feed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logger.Printf("RSS feed request failed url=%s status_code=%d\nStack:\n%s", url, resp.StatusCode, debug.Stack())
+		responseBody, _ := io.ReadAll(resp.Body)
+		logger.Printf("RSS feed request failed url=%s status_code=%d request_headers=%v response_headers=%v response_body=%s\nStack:\n%s",
+			url, resp.StatusCode, req.Header, resp.Header, string(responseBody), debug.Stack())
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 

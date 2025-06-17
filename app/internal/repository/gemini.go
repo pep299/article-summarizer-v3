@@ -111,7 +111,7 @@ func (g *geminiRepository) fetchHTML(ctx context.Context, url string) (string, e
 
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		logger.Printf("Error making HTTP request to URL %s: %v\nStack:\n%s", url, err, debug.Stack())
+		logger.Printf("Error making HTTP request to URL %s: %v request_headers=%v\nStack:\n%s", url, err, req.Header, debug.Stack())
 		return "", fmt.Errorf("fetching URL: %w", err)
 	}
 	defer resp.Body.Close()

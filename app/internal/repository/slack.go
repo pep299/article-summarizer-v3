@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"runtime/debug"
@@ -138,13 +139,15 @@ func (s *slackRepository) sendMessage(ctx context.Context, message, channel stri
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
-		logger.Printf("Error sending request to Slack API: %v\nStack:\n%s", err, debug.Stack())
+		logger.Printf("Error sending request to Slack API: %v request_body=%s request_headers=%v\nStack:\n%s", err, string(body), httpReq.Header, debug.Stack())
 		return fmt.Errorf("sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logger.Printf("Slack API request failed channel=%s status_code=%d\nStack:\n%s", channel, resp.StatusCode, debug.Stack())
+		responseBody, _ := io.ReadAll(resp.Body)
+		logger.Printf("Slack API request failed channel=%s status_code=%d request_body=%s request_headers=%v response_headers=%v response_body=%s\nStack:\n%s",
+			channel, resp.StatusCode, string(body), httpReq.Header, resp.Header, string(responseBody), debug.Stack())
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
