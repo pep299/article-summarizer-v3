@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -618,4 +620,126 @@ func TestE2E_XEndpoint(t *testing.T) {
 	}
 
 	t.Logf("✅ E2E Test passed: X endpoint with real oEmbed API")
+}
+
+// TestE2E_XQuoteChainEndpoint tests the X quote chain endpoint with actual API calls
+func TestE2E_XQuoteChainEndpoint(t *testing.T) {
+	config := loadE2EConfig()
+
+	t.Logf("🚀 Starting X quote chain endpoint E2E test")
+
+	setupE2EEnvironment(config)
+	defer cleanupE2EEnvironment()
+
+	// Create application
+	app, err := application.New()
+	if err != nil {
+		t.Fatalf("Failed to create application: %v", err)
+	}
+	defer app.Close()
+
+	// Create test server
+	server := httptest.NewServer(app.XQuoteChainHandler)
+	defer server.Close()
+
+	tests := []struct {
+		name                string
+		url                 string
+		expectedStatus      int
+		shouldHaveChain     bool
+		minChainLength      int
+		expectedContentType string
+	}{
+		{
+			name:                "Valid quote chain URL",
+			url:                 "https://x.com/_kaiinui/status/1932725968990580939",
+			expectedStatus:      200,
+			shouldHaveChain:     true,
+			minChainLength:      2, // At least original + one quote
+			expectedContentType: "text/plain; charset=utf-8",
+		},
+		{
+			name:                "Single tweet (no quotes)",
+			url:                 "https://x.com/mizchi/status/1932249213326504133",
+			expectedStatus:      200,
+			shouldHaveChain:     true,
+			minChainLength:      1, // Just the single tweet
+			expectedContentType: "text/plain; charset=utf-8",
+		},
+		{
+			name:            "Invalid URL format",
+			url:             "https://facebook.com/post/123",
+			expectedStatus:  400,
+			shouldHaveChain: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+
+			reqURL := server.URL + "?url=" + tt.url
+			req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+			if err != nil {
+				t.Fatalf("Failed to create request: %v", err)
+			}
+
+			client := &http.Client{Timeout: 60 * time.Second}
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatalf("Failed to send request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != tt.expectedStatus {
+				t.Errorf("Expected status %d, got %d for URL %s", tt.expectedStatus, resp.StatusCode, tt.url)
+			}
+
+			if tt.shouldHaveChain && resp.StatusCode == 200 {
+				// Check content type
+				contentType := resp.Header.Get("Content-Type")
+				if contentType != tt.expectedContentType {
+					t.Errorf("Expected Content-Type %s, got %s", tt.expectedContentType, contentType)
+				}
+
+				// Read response body
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					t.Fatalf("Failed to read response body: %v", err)
+				}
+
+				bodyStr := string(body)
+				if bodyStr == "" {
+					t.Error("Response body should not be empty")
+				}
+
+				// Count number of URLs in response (each URL represents one tweet in chain)
+				urlCount := strings.Count(bodyStr, "https://twitter.com/")
+				if urlCount < tt.minChainLength {
+					t.Errorf("Expected at least %d tweets in chain, got %d", tt.minChainLength, urlCount)
+				}
+
+				// Check format: should contain both URLs and text content
+				lines := strings.Split(strings.TrimSpace(bodyStr), "\n")
+				if len(lines) < tt.minChainLength*2 {
+					t.Errorf("Expected at least %d lines (URL + text for each tweet), got %d", tt.minChainLength*2, len(lines))
+				}
+
+				// Verify first line is a URL
+				if !strings.HasPrefix(lines[0], "https://twitter.com/") {
+					t.Errorf("First line should be a URL, got: %s", lines[0])
+				}
+
+				// Log successful response preview
+				preview := bodyStr
+				if len(bodyStr) > 200 {
+					preview = bodyStr[:200] + "..."
+				}
+				t.Logf("✅ Quote chain response preview: %s", preview)
+			}
+		})
+	}
+
+	t.Logf("✅ E2E Test passed: X quote chain endpoint with real API")
 }

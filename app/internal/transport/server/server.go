@@ -28,8 +28,9 @@ func CreateHandler() (http.Handler, func(), error) {
 	mux.Handle("POST /process/reddit", authMiddleware(app.RedditHandler))
 	mux.Handle("POST /process/lobsters", authMiddleware(app.LobstersHandler))
 	mux.Handle("POST /webhook", authMiddleware(app.WebhookHandler))
-	mux.Handle("GET /x", authMiddleware(app.XHandler)) // X fetch endpoint (auth required)
-	mux.HandleFunc("GET /hc", healthCheck)             // Health check endpoint
+	mux.Handle("GET /x", authMiddleware(app.XHandler))                       // X fetch endpoint (auth required)
+	mux.Handle("GET /x/quote-chain", authMiddleware(app.XQuoteChainHandler)) // X quote chain endpoint (auth required)
+	mux.HandleFunc("GET /hc", healthCheck)                                   // Health check endpoint
 
 	// Return handler and cleanup function
 	cleanup := func() {

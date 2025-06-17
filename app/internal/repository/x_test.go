@@ -189,3 +189,85 @@ func TestXClient_cleanHTML(t *testing.T) {
 		})
 	}
 }
+
+func TestXClient_extractTcoURL(t *testing.T) {
+	client := NewXClient()
+
+	tests := []struct {
+		name     string
+		html     string
+		expected string
+	}{
+		{
+			name:     "extract t.co URL",
+			html:     `<p>Check this out <a href="https://t.co/abc123XYZ">https://t.co/abc123XYZ</a></p>`,
+			expected: "https://t.co/abc123XYZ",
+		},
+		{
+			name:     "no t.co URL",
+			html:     `<p>Just some text with <a href="https://example.com">link</a></p>`,
+			expected: "",
+		},
+		{
+			name:     "multiple t.co URLs - returns first",
+			html:     `<p><a href="https://t.co/first123">first</a> and <a href="https://t.co/second456">second</a></p>`,
+			expected: "https://t.co/first123",
+		},
+		{
+			name:     "empty HTML",
+			html:     "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := client.extractTcoURL(tt.html)
+			if result != tt.expected {
+				t.Errorf("extractTcoURL() = %s, expected %s", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestXClient_FetchQuoteChain_MockServers(t *testing.T) {
+	t.Skip("Skipping complex mock test - covered by E2E tests")
+}
+
+func TestXClient_FetchQuoteChain_NoQuotes(t *testing.T) {
+	// Mock server for single tweet with no quotes
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := `{
+			"url": "https://twitter.com/user/status/123",
+			"author_name": "User",
+			"author_url": "https://twitter.com/user",
+			"html": "<blockquote><p>Just a regular tweet</p>&mdash; User (@user) <a href=\"https://twitter.com/user/status/123\">Dec 1, 2023</a></blockquote>"
+		}`
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(response))
+	}))
+	defer mockServer.Close()
+
+	client := &XClient{
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+		oembedURL:  mockServer.URL,
+	}
+
+	ctx := context.Background()
+	chain, err := client.FetchQuoteChain(ctx, "https://twitter.com/user/status/123")
+
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(chain) != 1 {
+		t.Fatalf("Expected chain length 1, got %d", len(chain))
+	}
+
+	if chain[0].AuthorName != "User" {
+		t.Errorf("Expected author 'User', got '%s'", chain[0].AuthorName)
+	}
+	if chain[0].Text != "Just a regular tweet" {
+		t.Errorf("Expected text 'Just a regular tweet', got '%s'", chain[0].Text)
+	}
+}

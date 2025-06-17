@@ -11,13 +11,14 @@ import (
 
 // Application represents the application with all business logic components
 type Application struct {
-	Config          *Config
-	WebhookHandler  *handler.Webhook
-	XHandler        *handler.X
-	HatenaHandler   *handler.HatenaHandler
-	RedditHandler   *handler.RedditHandler
-	LobstersHandler *handler.LobstersHandler
-	cleanup         func() error
+	Config             *Config
+	WebhookHandler     *handler.Webhook
+	XHandler           *handler.X
+	XQuoteChainHandler *handler.XQuoteChain
+	HatenaHandler      *handler.HatenaHandler
+	RedditHandler      *handler.RedditHandler
+	LobstersHandler    *handler.LobstersHandler
+	cleanup            func() error
 }
 
 // New creates a new application instance with all dependencies
@@ -48,6 +49,7 @@ func New() (*Application, error) {
 	// Create handlers (HTTP layer)
 	webhookHandler := handler.NewWebhook(urlService)
 	xHandler := handler.NewX(xRepo)
+	xQuoteChainHandler := handler.NewXQuoteChain(xRepo)
 	hatenaHandler := handler.NewHatenaHandler(rssRepo, geminiRepo, slackRepo, processedRepo, articleLimiter)
 	redditHandler := handler.NewRedditHandler(rssRepo, geminiRepo, slackRepo, processedRepo, articleLimiter)
 	lobstersHandler := handler.NewLobstersHandler(rssRepo, geminiRepo, slackRepo, processedRepo, articleLimiter)
@@ -61,13 +63,14 @@ func New() (*Application, error) {
 	}
 
 	return &Application{
-		Config:          cfg,
-		WebhookHandler:  webhookHandler,
-		XHandler:        xHandler,
-		HatenaHandler:   hatenaHandler,
-		RedditHandler:   redditHandler,
-		LobstersHandler: lobstersHandler,
-		cleanup:         cleanup,
+		Config:             cfg,
+		WebhookHandler:     webhookHandler,
+		XHandler:           xHandler,
+		XQuoteChainHandler: xQuoteChainHandler,
+		HatenaHandler:      hatenaHandler,
+		RedditHandler:      redditHandler,
+		LobstersHandler:    lobstersHandler,
+		cleanup:            cleanup,
 	}, nil
 }
 
