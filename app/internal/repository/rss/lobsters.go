@@ -2,6 +2,7 @@ package rss
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"strings"
@@ -40,9 +41,41 @@ func (l *LobstersRSSRepository) FetchArticles(ctx context.Context) ([]repository
 	return l.filterItems(items), nil
 }
 
-func (l *LobstersRSSRepository) FetchComments(ctx context.Context, commentURL string) (*Comments, error) {
-	// Lobsters doesn't support comment fetching yet
-	return nil, fmt.Errorf("comment fetching not implemented for Lobsters")
+func (l *LobstersRSSRepository) FetchComments(ctx context.Context, articleURL string) (*Comments, error) {
+	// Convert article URL to Lobsters JSON API URL
+	// Example: https://lobste.rs/s/abc123/title -> https://lobste.rs/s/abc123/title.json
+	jsonURL := articleURL + ".json"
+
+	headers := map[string]string{
+		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+		"Accept":     "application/json",
+	}
+
+	// Fetch JSON data
+	jsonContent, err := l.rssRepo.FetchFeedXML(ctx, jsonURL, headers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Lobsters JSON: %w", err)
+	}
+
+	// Parse JSON response
+	var lobstersData LobstersStoryResponse
+	if err := json.Unmarshal([]byte(jsonContent), &lobstersData); err != nil {
+		return nil, fmt.Errorf("failed to parse Lobsters JSON: %w", err)
+	}
+
+	// Convert to Comments format
+	var commentTexts []string
+	extractCommentsRecursively(lobstersData.Comments, &commentTexts)
+
+	if len(commentTexts) == 0 {
+		return &Comments{Text: ""}, nil
+	}
+
+	// Combine all comments into a single text for summarization
+	combinedText := fmt.Sprintf("以下はLobstersのコメントです:\n\n%s",
+		strings.Join(commentTexts, "\n\n"))
+
+	return &Comments{Text: combinedText}, nil
 }
 
 func (l *LobstersRSSRepository) parseFeed(xmlContent string) ([]repository.Item, error) {
@@ -122,4 +155,33 @@ func (l *LobstersRSSRepository) parseDate(dateStr string) (time.Time, error) {
 	}
 
 	return time.Time{}, fmt.Errorf("unable to parse Lobsters date: %s", dateStr)
+}
+
+// LobstersStoryResponse represents the JSON response from Lobsters API
+type LobstersStoryResponse struct {
+	Title    string            `json:"title"`
+	URL      string            `json:"url"`
+	Comments []LobstersComment `json:"comments"`
+}
+
+type LobstersComment struct {
+	Comment     string            `json:"comment"`
+	CommentHTML string            `json:"comment_html"`
+	CreatedAt   string            `json:"created_at"`
+	User        string            `json:"user"`
+	Score       int               `json:"score"`
+	Replies     []LobstersComment `json:"replies"`
+}
+
+// extractCommentsRecursively extracts all comment text from nested structure
+func extractCommentsRecursively(comments []LobstersComment, commentTexts *[]string) {
+	for _, comment := range comments {
+		if strings.TrimSpace(comment.Comment) != "" {
+			*commentTexts = append(*commentTexts, comment.Comment)
+		}
+		// Recursively extract replies
+		if len(comment.Replies) > 0 {
+			extractCommentsRecursively(comment.Replies, commentTexts)
+		}
+	}
 }

@@ -2,9 +2,12 @@ package rss
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pep299/article-summarizer-v3/internal/repository"
@@ -40,9 +43,59 @@ func (h *HatenaRSSRepository) FetchArticles(ctx context.Context) ([]repository.I
 	return h.parseFeed(xmlContent)
 }
 
-func (h *HatenaRSSRepository) FetchComments(ctx context.Context, commentURL string) (*Comments, error) {
-	// Hatena doesn't support comment fetching yet
-	return nil, fmt.Errorf("comment fetching not implemented for Hatena")
+// HatenaBookmarkAPIResponse represents Hatena Bookmark API response
+type HatenaBookmarkAPIResponse struct {
+	Bookmarks []HatenaBookmark `json:"bookmarks"`
+	Count     int              `json:"count"`
+	URL       string           `json:"url"`
+	Title     string           `json:"title"`
+}
+
+type HatenaBookmark struct {
+	Comment   string   `json:"comment"`
+	Tags      []string `json:"tags"`
+	Timestamp string   `json:"timestamp"`
+	User      string   `json:"user"`
+}
+
+func (h *HatenaRSSRepository) FetchComments(ctx context.Context, articleURL string) (*Comments, error) {
+	// Use Hatena Bookmark API to fetch comments
+	apiURL := "https://b.hatena.ne.jp/entry/jsonlite/?url=" + url.QueryEscape(articleURL)
+
+	headers := map[string]string{
+		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+		"Accept":     "application/json",
+	}
+
+	// Fetch JSON data
+	jsonContent, err := h.rssRepo.FetchFeedXML(ctx, apiURL, headers)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Hatena bookmarks: %w", err)
+	}
+
+	// Parse JSON response
+	var apiResponse HatenaBookmarkAPIResponse
+	if err := json.Unmarshal([]byte(jsonContent), &apiResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse Hatena bookmark JSON: %w", err)
+	}
+
+	// Convert to Comments format
+	var commentTexts []string
+	for _, bookmark := range apiResponse.Bookmarks {
+		if strings.TrimSpace(bookmark.Comment) != "" {
+			commentTexts = append(commentTexts, bookmark.Comment)
+		}
+	}
+
+	if len(commentTexts) == 0 {
+		return &Comments{Text: ""}, nil
+	}
+
+	// Combine all comments into a single text for summarization
+	combinedText := fmt.Sprintf("以下ははてなブックマークのコメントです:\n\n%s",
+		strings.Join(commentTexts, "\n\n"))
+
+	return &Comments{Text: combinedText}, nil
 }
 
 func (h *HatenaRSSRepository) parseFeed(xmlContent string) ([]repository.Item, error) {

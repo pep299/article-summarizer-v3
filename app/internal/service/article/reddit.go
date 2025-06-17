@@ -99,28 +99,11 @@ func (p *RedditProcessor) processRedditArticle(ctx context.Context, article repo
 
 	var slackDuration time.Duration
 
-	// 3. コメント取得・要約 (Cloud Functions で動作しないため無効化)
-	// if article.CommentURL != "" && article.CommentURL != article.Link {
-	//     commentStart := time.Now()
-	//     comments, err := p.redditRepo.FetchComments(ctx, article.CommentURL)
-	//     if err != nil {
-	//         logger.Printf("Error fetching comments for %s: %v", article.Title, err)
-	//         return fmt.Errorf("fetching comments: %w", err)
-	//     }
-	//
-	//     // 4. コメント要約
-	//     commentSummary, err := p.geminiRepo.SummarizeComments(ctx, comments.Text)
-	//     if err != nil {
-	//         logger.Printf("Error summarizing comments for %s: %v", article.Title, err)
-	//         return fmt.Errorf("summarizing comments: %w", err)
-	//     }
-	//     commentDuration = time.Since(commentStart)
-	//
-	//     // 5. 通知送信（記事 + コメント）
-	//     // ... comment processing code disabled ...
-	// }
+	// コメント取得・要約は無効化
+	// Cloud FunctionsのIP制限によりReddit APIアクセスができないため、
+	// Redditコメント要約機能は利用不可。記事要約のみ実行する。
 
-	// 4. 通知送信（記事のみ）
+	// 3. 通知送信（記事のみ）
 	slackStart := time.Now()
 	if err := p.slackRepo.Send(ctx, repository.Notification{
 		Title:   article.Title,
@@ -133,7 +116,7 @@ func (p *RedditProcessor) processRedditArticle(ctx context.Context, article repo
 	}
 	slackDuration = time.Since(slackStart)
 
-	// 6. インデックス更新
+	// 4. インデックス更新
 	processStart := time.Now()
 	if err := p.processedRepo.MarkAsProcessed(ctx, article); err != nil {
 		logger.Printf("Error marking article as processed %s: %v\nStack:\n%s", article.Title, err, debug.Stack())

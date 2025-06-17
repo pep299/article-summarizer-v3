@@ -7,9 +7,12 @@ import (
 )
 
 // Mock Slack Repository
-type MockSlackRepo struct{}
+type MockSlackRepo struct {
+	SentNotifications []repository.Notification
+}
 
 func (m *MockSlackRepo) Send(ctx context.Context, notification repository.Notification) error {
+	m.SentNotifications = append(m.SentNotifications, notification)
 	return nil
 }
 
