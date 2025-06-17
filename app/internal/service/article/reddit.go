@@ -97,63 +97,41 @@ func (p *RedditProcessor) processRedditArticle(ctx context.Context, article repo
 	}
 	summaryDuration := time.Since(summaryStart)
 
-	var commentDuration, slackDuration time.Duration
+	var slackDuration time.Duration
 
-	// 3. コメント取得
-	if article.CommentURL != "" && article.CommentURL != article.Link {
-		commentStart := time.Now()
-		comments, err := p.redditRepo.FetchComments(ctx, article.CommentURL)
-		if err != nil {
-			logger.Printf("Error fetching comments for %s: %v", article.Title, err)
-			return fmt.Errorf("fetching comments: %w", err)
-		}
+	// 3. コメント取得・要約 (Cloud Functions で動作しないため無効化)
+	// if article.CommentURL != "" && article.CommentURL != article.Link {
+	//     commentStart := time.Now()
+	//     comments, err := p.redditRepo.FetchComments(ctx, article.CommentURL)
+	//     if err != nil {
+	//         logger.Printf("Error fetching comments for %s: %v", article.Title, err)
+	//         return fmt.Errorf("fetching comments: %w", err)
+	//     }
+	//
+	//     // 4. コメント要約
+	//     commentSummary, err := p.geminiRepo.SummarizeComments(ctx, comments.Text)
+	//     if err != nil {
+	//         logger.Printf("Error summarizing comments for %s: %v", article.Title, err)
+	//         return fmt.Errorf("summarizing comments: %w", err)
+	//     }
+	//     commentDuration = time.Since(commentStart)
+	//
+	//     // 5. 通知送信（記事 + コメント）
+	//     // ... comment processing code disabled ...
+	// }
 
-		// 4. コメント要約
-		commentSummary, err := p.geminiRepo.SummarizeComments(ctx, comments.Text)
-		if err != nil {
-			logger.Printf("Error summarizing comments for %s: %v", article.Title, err)
-			return fmt.Errorf("summarizing comments: %w", err)
-		}
-		commentDuration = time.Since(commentStart)
-
-		// 5. 通知送信（記事 + コメント）
-		slackStart := time.Now()
-		// 記事通知
-		if err := p.slackRepo.Send(ctx, repository.Notification{
-			Title:   article.Title,
-			Source:  article.Source,
-			URL:     article.Link,
-			Summary: summary.Summary,
-		}); err != nil {
-			logger.Printf("Error sending article notification for %s: %v", article.Title, err)
-			return fmt.Errorf("sending article notification: %w", err)
-		}
-
-		// コメント通知
-		if err := p.slackRepo.Send(ctx, repository.Notification{
-			Title:   article.Title,
-			Source:  article.Source,
-			URL:     article.CommentURL,
-			Summary: commentSummary.Summary,
-		}); err != nil {
-			logger.Printf("Error sending comment notification for %s: %v", article.Title, err)
-			return fmt.Errorf("sending comment notification: %w", err)
-		}
-		slackDuration = time.Since(slackStart)
-	} else {
-		// コメントがない場合は記事のみ
-		slackStart := time.Now()
-		if err := p.slackRepo.Send(ctx, repository.Notification{
-			Title:   article.Title,
-			Source:  article.Source,
-			URL:     article.Link,
-			Summary: summary.Summary,
-		}); err != nil {
-			logger.Printf("Error sending notification for %s: %v", article.Title, err)
-			return fmt.Errorf("sending notification: %w", err)
-		}
-		slackDuration = time.Since(slackStart)
+	// 4. 通知送信（記事のみ）
+	slackStart := time.Now()
+	if err := p.slackRepo.Send(ctx, repository.Notification{
+		Title:   article.Title,
+		Source:  article.Source,
+		URL:     article.Link,
+		Summary: summary.Summary,
+	}); err != nil {
+		logger.Printf("Error sending notification for %s: %v", article.Title, err)
+		return fmt.Errorf("sending notification: %w", err)
 	}
+	slackDuration = time.Since(slackStart)
 
 	// 6. インデックス更新
 	processStart := time.Now()
@@ -164,13 +142,8 @@ func (p *RedditProcessor) processRedditArticle(ctx context.Context, article repo
 	processDuration := time.Since(processStart)
 
 	totalDuration := time.Since(start)
-	if article.CommentURL != "" && article.CommentURL != article.Link {
-		logger.Printf("Article processing completed title=%s total_duration_ms=%d summary_duration_ms=%d comment_duration_ms=%d slack_duration_ms=%d process_duration_ms=%d",
-			article.Title, totalDuration.Milliseconds(), summaryDuration.Milliseconds(), commentDuration.Milliseconds(), slackDuration.Milliseconds(), processDuration.Milliseconds())
-	} else {
-		logger.Printf("Article processing completed title=%s total_duration_ms=%d summary_duration_ms=%d slack_duration_ms=%d process_duration_ms=%d",
-			article.Title, totalDuration.Milliseconds(), summaryDuration.Milliseconds(), slackDuration.Milliseconds(), processDuration.Milliseconds())
-	}
+	logger.Printf("Article processing completed title=%s total_duration_ms=%d summary_duration_ms=%d slack_duration_ms=%d process_duration_ms=%d (comment processing disabled)",
+		article.Title, totalDuration.Milliseconds(), summaryDuration.Milliseconds(), slackDuration.Milliseconds(), processDuration.Milliseconds())
 
 	return nil
 }
