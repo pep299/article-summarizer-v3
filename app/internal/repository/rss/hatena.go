@@ -40,7 +40,12 @@ func (h *HatenaRSSRepository) FetchArticles(ctx context.Context) ([]repository.I
 		return nil, fmt.Errorf("fetching Hatena RSS: %w", err)
 	}
 
-	return h.parseFeed(xmlContent)
+	items, err := h.parseFeed(xmlContent)
+	if err != nil {
+		return nil, err
+	}
+
+	return h.rssRepo.GetUniqueItems(items), nil
 }
 
 // HatenaBookmarkAPIResponse represents Hatena Bookmark API response

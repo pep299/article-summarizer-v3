@@ -38,7 +38,8 @@ func (l *LobstersRSSRepository) FetchArticles(ctx context.Context) ([]repository
 		return nil, err
 	}
 
-	return l.filterItems(items), nil
+	filteredItems := l.filterItems(items)
+	return l.rssRepo.GetUniqueItems(filteredItems), nil
 }
 
 func (l *LobstersRSSRepository) FetchComments(ctx context.Context, articleURL string) (*Comments, error) {

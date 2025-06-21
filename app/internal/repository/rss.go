@@ -96,9 +96,10 @@ func (r *rssRepository) GetUniqueItems(items []Item) []Item {
 	var unique []Item
 
 	for _, item := range items {
-		key := item.GUID
+		// Always use Link as the primary key for deduplication
+		key := item.Link
 		if key == "" {
-			key = item.Link
+			key = item.GUID
 		}
 
 		if key != "" && !seen[key] {

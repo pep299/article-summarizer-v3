@@ -60,7 +60,12 @@ func (r *RedditRSSRepository) FetchArticles(ctx context.Context) ([]repository.I
 		return nil, fmt.Errorf("fetching Reddit RSS: %w", err)
 	}
 
-	return r.parseFeed(xmlContent)
+	items, err := r.parseFeed(xmlContent)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.rssRepo.GetUniqueItems(items), nil
 }
 
 func (r *RedditRSSRepository) FetchComments(ctx context.Context, commentURL string) (*Comments, error) {

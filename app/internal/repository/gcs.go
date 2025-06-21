@@ -41,7 +41,7 @@ type gcsRepository struct {
 	indexFile  string
 }
 
-const defaultIndexFileName = "index.json"
+const defaultIndexFileName = "index-v2.json"
 
 // NewProcessedArticleRepository creates a new processed article repository
 func NewProcessedArticleRepository() (ProcessedArticleRepository, error) {
@@ -164,11 +164,8 @@ func (g *gcsRepository) MarkAsProcessed(ctx context.Context, article Item) error
 
 // GenerateKey generates a key for an article
 func (g *gcsRepository) GenerateKey(article Item) string {
-	// Use GUID if available, otherwise use link
-	identifier := article.GUID
-	if identifier == "" {
-		identifier = article.Link
-	}
+	// Always use Link for consistent URL-based deduplication
+	identifier := article.Link
 
 	// Normalize URL
 	normalizedURL, err := g.normalizeURL(identifier)
@@ -189,16 +186,37 @@ func (g *gcsRepository) Close() error {
 	return nil
 }
 
-// normalizeURL normalizes URL by removing query parameters
+// normalizeURL normalizes URL for consistent duplicate detection
 func (g *gcsRepository) normalizeURL(rawURL string) (string, error) {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("parsing URL: %w", err)
 	}
 
-	// Remove query parameters
+	// 1. Force HTTPS protocol
+	if parsedURL.Scheme == "http" {
+		parsedURL.Scheme = "https"
+	}
+
+	// 2. Remove www subdomain
+	if strings.HasPrefix(parsedURL.Host, "www.") {
+		parsedURL.Host = parsedURL.Host[4:]
+	}
+
+	// 3. Remove query parameters and fragments
 	parsedURL.RawQuery = ""
 	parsedURL.Fragment = ""
+
+	// 4. Remove trailing slash from path (except root)
+	if parsedURL.Path != "/" && strings.HasSuffix(parsedURL.Path, "/") {
+		parsedURL.Path = strings.TrimSuffix(parsedURL.Path, "/")
+	}
+
+	// 5. Convert host to lowercase
+	parsedURL.Host = strings.ToLower(parsedURL.Host)
+
+	// 6. Convert path to lowercase for case-insensitive comparison
+	parsedURL.Path = strings.ToLower(parsedURL.Path)
 
 	return parsedURL.String(), nil
 }
