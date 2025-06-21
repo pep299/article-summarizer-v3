@@ -68,7 +68,7 @@ func (l *LobstersRSSRepository) FetchComments(ctx context.Context, articleURL st
 	var commentTexts []string
 	extractCommentsRecursively(lobstersData.Comments, &commentTexts)
 
-	if len(commentTexts) == 0 {
+	if len(commentTexts) < 2 {
 		return &Comments{Text: ""}, nil
 	}
 

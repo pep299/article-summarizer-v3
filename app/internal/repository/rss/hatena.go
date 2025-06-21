@@ -92,7 +92,7 @@ func (h *HatenaRSSRepository) FetchComments(ctx context.Context, articleURL stri
 		}
 	}
 
-	if len(commentTexts) == 0 {
+	if len(commentTexts) < 2 {
 		return &Comments{Text: ""}, nil
 	}
 
