@@ -1,0 +1,36 @@
+# Ignore test files and coverage reports
+coverage.html
+coverage.out
+*.test
+test/
+*_test.go
+
+# Ignore development files
+.air.toml
+Makefile
+
+# Ignore documentation
+README.md
+*.md
+
+# Ignore build artifacts
+../build/
+build/
+
+# Ignore local environment files
+.env
+.env.local
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore git files
+.git/
+.gitignore
+
+# Ignore temporary files
+tmp/
+temp/
