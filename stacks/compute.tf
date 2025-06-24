@@ -1,5 +1,6 @@
 # Artifact Registry repository for Cloud Run source deployments
 resource "google_artifact_registry_repository" "cloud_run_source_deploy" {
+  # checkov:skip=CKV_GCP_84:Using default encryption is sufficient for this use case
   repository_id = "cloud-run-source-deploy"
   format        = "DOCKER"
   location      = var.region
