@@ -22,12 +22,6 @@ variable "bucket_name" {
   default     = "article-summarizer-processed-articles"
 }
 
-variable "index_file_name" {
-  description = "Index file name in GCS bucket"
-  type        = string
-  default     = "index-v2.json"
-}
-
 variable "service_account_name" {
   description = "Service account name"
   type        = string
