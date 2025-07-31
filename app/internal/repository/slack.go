@@ -14,12 +14,6 @@ import (
 	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
 )
 
-// ArticleSummary represents an article summary for notification
-type ArticleSummary struct {
-	RSS            Item
-	Summary        SummarizeResponse
-	CommentSummary *string // Optional Reddit comment summary
-}
 
 // Notification represents a unified notification structure
 type Notification struct {
@@ -32,10 +26,7 @@ type Notification struct {
 
 type SlackRepository interface {
 	Send(ctx context.Context, notification Notification) error
-	// Legacy methods for backward compatibility during migration
-	SendArticleSummary(ctx context.Context, summary ArticleSummary) error
 	SendOnDemandSummary(ctx context.Context, article Item, summary SummarizeResponse, targetChannel string) error
-	SendCommentSummary(ctx context.Context, article Item, commentSummary string) error
 }
 
 type slackRepository struct {
@@ -56,57 +47,7 @@ func NewSlackRepository(botToken, channel, baseURL string) SlackRepository {
 	}
 }
 
-func (s *slackRepository) SendArticleSummary(ctx context.Context, summary ArticleSummary) error {
-	logger := log.New(funcframework.LogWriter(ctx), "", 0)
-	start := time.Now()
 
-	logger.Printf("Slack notification started title=%s channel=%s", summary.RSS.Title, s.channel)
-	message := s.formatRSSMessage(summary)
-	if err := s.sendMessage(ctx, message, s.channel); err != nil {
-		logger.Printf("Error sending RSS article summary to Slack: %v", err)
-		return err
-	}
-
-	duration := time.Since(start)
-	logger.Printf("Slack notification completed title=%s channel=%s duration_ms=%d",
-		summary.RSS.Title, s.channel, duration.Milliseconds())
-	return nil
-}
-
-func (s *slackRepository) formatRSSMessage(summary ArticleSummary) string {
-	timestamp := time.Now().In(time.FixedZone("JST", 9*3600)).Format("2006-01-02 15:04:05")
-
-	// Base message with article summary
-	message := fmt.Sprintf(`🆕 *新しい記事を要約しました*
-
-*%s*
-📰 ソース: %s
-🔗 URL: %s
-📊 コンテンツ文字数: %d文字
-
-📄 **記事要約:**
-%s`,
-		summary.RSS.Title,
-		summary.RSS.Source,
-		summary.RSS.Link,
-		summary.Summary.ContentChars,
-		summary.Summary.Summary)
-
-	// Add comment summary if available (for Reddit posts)
-	if summary.CommentSummary != nil && *summary.CommentSummary != "" {
-		message += fmt.Sprintf(`
-
-💬 **コメント要約:**
-%s`, *summary.CommentSummary)
-	}
-
-	// Add timestamp
-	message += fmt.Sprintf(`
-
-⏰ 処理時刻: %s`, timestamp)
-
-	return message
-}
 
 func (s *slackRepository) sendMessage(ctx context.Context, message, channel string) error {
 	logger := log.New(funcframework.LogWriter(ctx), "", 0)
@@ -204,7 +145,6 @@ func (s *slackRepository) formatOnDemandMessage(article Item, summary SummarizeR
 		timestamp)
 }
 
-// SendCommentSummary sends comment summary notification
 // Send sends a unified notification
 func (s *slackRepository) Send(ctx context.Context, notification Notification) error {
 	logger := log.New(funcframework.LogWriter(ctx), "", 0)
@@ -225,24 +165,6 @@ func (s *slackRepository) Send(ctx context.Context, notification Notification) e
 	return nil
 }
 
-func (s *slackRepository) SendCommentSummary(ctx context.Context, article Item, commentSummary string) error {
-	logger := log.New(funcframework.LogWriter(ctx), "", 0)
-	start := time.Now()
-
-	logger.Printf("Comment notification started title=%s channel=%s", article.Title, s.channel)
-
-	// Send comment summary notification only
-	commentMessage := s.formatCommentMessage(article, commentSummary)
-	if err := s.sendMessage(ctx, commentMessage, s.channel); err != nil {
-		logger.Printf("Error sending comment notification to Slack: %v", err)
-		return err
-	}
-
-	duration := time.Since(start)
-	logger.Printf("Comment notification completed title=%s channel=%s duration_ms=%d",
-		article.Title, s.channel, duration.Milliseconds())
-	return nil
-}
 
 func (s *slackRepository) formatNotification(notification Notification) string {
 	timestamp := time.Now().In(time.FixedZone("JST", 9*3600)).Format("2006-01-02 15:04:05")
@@ -282,21 +204,3 @@ func (s *slackRepository) formatArticleMessage(article Item, summary SummarizeRe
 		timestamp)
 }
 
-func (s *slackRepository) formatCommentMessage(article Item, commentSummary string) string {
-	timestamp := time.Now().In(time.FixedZone("JST", 9*3600)).Format("2006-01-02 15:04:05")
-
-	return fmt.Sprintf(`💬 *コメント要約*
-
-*%s*
-📰 ソース: %s  
-🗣️ ディスカッション: %s
-
-%s
-
-⏰ 処理時刻: %s`,
-		article.Title,
-		article.Source,
-		article.CommentURL,
-		commentSummary,
-		timestamp)
-}

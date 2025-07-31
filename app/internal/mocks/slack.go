@@ -16,14 +16,6 @@ func (m *MockSlackRepo) Send(ctx context.Context, notification repository.Notifi
 	return nil
 }
 
-func (m *MockSlackRepo) SendArticleSummary(ctx context.Context, summary repository.ArticleSummary) error {
-	return nil
-}
-
 func (m *MockSlackRepo) SendOnDemandSummary(ctx context.Context, article repository.Item, summary repository.SummarizeResponse, targetChannel string) error {
-	return nil
-}
-
-func (m *MockSlackRepo) SendCommentSummary(ctx context.Context, article repository.Item, commentSummary string) error {
 	return nil
 }
