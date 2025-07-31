@@ -106,10 +106,11 @@ func (p *RedditProcessor) processRedditArticle(ctx context.Context, article repo
 	// 3. 通知送信（記事のみ）
 	slackStart := time.Now()
 	if err := p.slackRepo.Send(ctx, repository.Notification{
-		Title:   article.Title,
-		Source:  article.Source,
-		URL:     article.Link,
-		Summary: summary.Summary,
+		Title:        article.Title,
+		Source:       article.Source,
+		URL:          article.Link,
+		Summary:      summary.Summary,
+		ContentChars: summary.ContentChars,
 	}); err != nil {
 		logger.Printf("Error sending notification for %s: %v", article.Title, err)
 		return fmt.Errorf("sending notification: %w", err)

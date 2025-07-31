@@ -23,10 +23,11 @@ type ArticleSummary struct {
 
 // Notification represents a unified notification structure
 type Notification struct {
-	Title   string
-	Source  string // "reddit" | "hatena" | "lobsters" | "ondemand"
-	URL     string
-	Summary string
+	Title        string
+	Source       string // "reddit" | "hatena" | "lobsters" | "ondemand"
+	URL          string
+	Summary      string
+	ContentChars int // Original content character count
 }
 
 type SlackRepository interface {
@@ -81,12 +82,14 @@ func (s *slackRepository) formatRSSMessage(summary ArticleSummary) string {
 *%s*
 📰 ソース: %s
 🔗 URL: %s
+📊 コンテンツ文字数: %d文字
 
 📄 **記事要約:**
 %s`,
 		summary.RSS.Title,
 		summary.RSS.Source,
 		summary.RSS.Link,
+		summary.Summary.ContentChars,
 		summary.Summary.Summary)
 
 	// Add comment summary if available (for Reddit posts)
@@ -188,6 +191,7 @@ func (s *slackRepository) formatOnDemandMessage(article Item, summary SummarizeR
 
 *%s*
 🔗 URL: %s
+📊 コンテンツ文字数: %d文字
 
 %s
 
@@ -195,6 +199,7 @@ func (s *slackRepository) formatOnDemandMessage(article Item, summary SummarizeR
 ⏰ 処理時刻: %s`,
 		title,
 		article.Link,
+		summary.ContentChars,
 		summary.Summary,
 		timestamp)
 }
@@ -245,6 +250,7 @@ func (s *slackRepository) formatNotification(notification Notification) string {
 	return fmt.Sprintf(`*%s*
 📰 ソース: %s
 🔗 URL: %s
+📊 コンテンツ文字数: %d文字
 
 %s
 
@@ -252,6 +258,7 @@ func (s *slackRepository) formatNotification(notification Notification) string {
 		notification.Title,
 		notification.Source,
 		notification.URL,
+		notification.ContentChars,
 		notification.Summary,
 		timestamp)
 }

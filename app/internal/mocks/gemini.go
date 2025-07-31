@@ -10,11 +10,11 @@ import (
 type MockGeminiRepo struct{}
 
 func (m *MockGeminiRepo) SummarizeURL(ctx context.Context, url string) (*repository.SummarizeResponse, error) {
-	return &repository.SummarizeResponse{Summary: "test summary"}, nil
+	return &repository.SummarizeResponse{Summary: "test summary", ContentChars: 1500}, nil
 }
 
 func (m *MockGeminiRepo) SummarizeURLForOnDemand(ctx context.Context, url string) (*repository.SummarizeResponse, error) {
-	return &repository.SummarizeResponse{Summary: "test summary"}, nil
+	return &repository.SummarizeResponse{Summary: "test summary", ContentChars: 2000}, nil
 }
 
 func (m *MockGeminiRepo) SummarizeText(ctx context.Context, text string) (string, error) {
@@ -22,9 +22,9 @@ func (m *MockGeminiRepo) SummarizeText(ctx context.Context, text string) (string
 }
 
 func (m *MockGeminiRepo) SummarizeComments(ctx context.Context, text string) (*repository.SummarizeResponse, error) {
-	return &repository.SummarizeResponse{Summary: "test comment summary"}, nil
+	return &repository.SummarizeResponse{Summary: "test comment summary", ContentChars: 3000}, nil
 }
 
 func (m *MockGeminiRepo) SummarizeOnDemand(ctx context.Context, url string) (*repository.SummarizeResponse, error) {
-	return &repository.SummarizeResponse{Summary: "test summary"}, nil
+	return &repository.SummarizeResponse{Summary: "test summary", ContentChars: 2500}, nil
 }

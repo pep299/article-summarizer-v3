@@ -105,7 +105,8 @@ func (p *LobstersProcessor) processLobstersArticle(ctx context.Context, article 
 	// 記事通知とコメント通知を別々に送信する
 	var commentSummary *string
 	var commentDuration time.Duration
-	if err := p.fetchAndProcessLobstersComments(ctx, article, &commentSummary, &commentDuration); err != nil {
+	var commentChars int
+	if err := p.fetchAndProcessLobstersComments(ctx, article, &commentSummary, &commentDuration, &commentChars); err != nil {
 		logger.Printf("Warning: Failed to fetch Lobsters comments for %s: %v", article.Title, err)
 		// Lobstersコメント取得失敗でも処理は続行
 	}
@@ -114,10 +115,11 @@ func (p *LobstersProcessor) processLobstersArticle(ctx context.Context, article 
 	slackStart := time.Now()
 	// 記事通知
 	if err := p.slackRepo.Send(ctx, repository.Notification{
-		Title:   article.Title,
-		Source:  article.Source,
-		URL:     article.Link,
-		Summary: summary.Summary,
+		Title:        article.Title,
+		Source:       article.Source,
+		URL:          article.Link,
+		Summary:      summary.Summary,
+		ContentChars: summary.ContentChars,
 	}); err != nil {
 		logger.Printf("Error sending article notification for %s: %v", article.Title, err)
 		return fmt.Errorf("sending article notification: %w", err)
@@ -126,10 +128,11 @@ func (p *LobstersProcessor) processLobstersArticle(ctx context.Context, article 
 	// コメント通知（コメントがある場合）
 	if commentSummary != nil {
 		if err := p.slackRepo.Send(ctx, repository.Notification{
-			Title:   article.Title + " - コメント",
-			Source:  article.Source,
-			URL:     article.Link,
-			Summary: *commentSummary,
+			Title:        article.Title + " - コメント",
+			Source:       article.Source,
+			URL:          article.Link,
+			Summary:      *commentSummary,
+			ContentChars: commentChars, // コメントの元文字数を表示
 		}); err != nil {
 			logger.Printf("Error sending comment notification for %s: %v", article.Title, err)
 			return fmt.Errorf("sending comment notification: %w", err)
@@ -153,7 +156,7 @@ func (p *LobstersProcessor) processLobstersArticle(ctx context.Context, article 
 }
 
 // fetchAndProcessLobstersComments handles Lobsters comment retrieval and summarization
-func (p *LobstersProcessor) fetchAndProcessLobstersComments(ctx context.Context, article repository.Item, commentSummary **string, commentDuration *time.Duration) error {
+func (p *LobstersProcessor) fetchAndProcessLobstersComments(ctx context.Context, article repository.Item, commentSummary **string, commentDuration *time.Duration, commentChars *int) error {
 	logger := log.New(funcframework.LogWriter(ctx), "", 0)
 
 	logger.Printf("Comments fetching started url=%s", article.Link)
@@ -168,6 +171,7 @@ func (p *LobstersProcessor) fetchAndProcessLobstersComments(ctx context.Context,
 	if comments.Text == "" {
 		logger.Printf("No Lobsters comments found for %s", article.Title)
 		*commentDuration = time.Since(commentStart)
+		*commentChars = 0
 		return nil
 	}
 
@@ -181,6 +185,7 @@ func (p *LobstersProcessor) fetchAndProcessLobstersComments(ctx context.Context,
 
 	*commentSummary = &summaryResponse.Summary
 	*commentDuration = time.Since(commentStart)
+	*commentChars = len(comments.Text)
 
 	logger.Printf("Comments summarization completed summary_length=%d duration_ms=%d",
 		len(summaryResponse.Summary), commentDuration.Milliseconds())
