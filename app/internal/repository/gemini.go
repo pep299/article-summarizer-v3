@@ -18,8 +18,9 @@ import (
 
 // SummarizeResponse represents a summarization response
 type SummarizeResponse struct {
-	Summary     string    `json:"summary"`
-	ProcessedAt time.Time `json:"processed_at"`
+	Summary      string    `json:"summary"`
+	ProcessedAt  time.Time `json:"processed_at"`
+	ContentChars int       `json:"content_chars"` // Original content character count
 }
 
 type GeminiRepository interface {
@@ -93,8 +94,9 @@ func (g *geminiRepository) SummarizeURL(ctx context.Context, url string) (*Summa
 		url, len(summary), geminiDuration.Milliseconds(), totalDuration.Milliseconds())
 
 	return &SummarizeResponse{
-		Summary:     summary,
-		ProcessedAt: time.Now(),
+		Summary:      summary,
+		ProcessedAt:  time.Now(),
+		ContentChars: len(textContent),
 	}, nil
 }
 
@@ -306,8 +308,9 @@ func (g *geminiRepository) SummarizeURLForOnDemand(ctx context.Context, url stri
 		url, len(summary), geminiDuration.Milliseconds(), totalDuration.Milliseconds())
 
 	return &SummarizeResponse{
-		Summary:     summary,
-		ProcessedAt: time.Now(),
+		Summary:      summary,
+		ProcessedAt:  time.Now(),
+		ContentChars: len(textContent),
 	}, nil
 }
 
@@ -380,8 +383,9 @@ func (g *geminiRepository) SummarizeComments(ctx context.Context, commentsText s
 		len(summary), geminiDuration.Milliseconds())
 
 	return &SummarizeResponse{
-		Summary:     summary,
-		ProcessedAt: time.Now(),
+		Summary:      summary,
+		ProcessedAt:  time.Now(),
+		ContentChars: len(commentsText),
 	}, nil
 }
 
