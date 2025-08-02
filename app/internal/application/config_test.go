@@ -37,6 +37,18 @@ func TestLoadConfig(t *testing.T) {
 		t.Errorf("Expected SlackChannel to be '#article-summarizer', got '%s'", cfg.SlackChannel)
 	}
 
+	if cfg.SlackChannelReddit != "#reddit-article-summary" {
+		t.Errorf("Expected SlackChannelReddit to be '#reddit-article-summary', got '%s'", cfg.SlackChannelReddit)
+	}
+
+	if cfg.SlackChannelHatena != "#hatena-article-summary" {
+		t.Errorf("Expected SlackChannelHatena to be '#hatena-article-summary', got '%s'", cfg.SlackChannelHatena)
+	}
+
+	if cfg.SlackChannelLobsters != "#lobsters-article-summary" {
+		t.Errorf("Expected SlackChannelLobsters to be '#lobsters-article-summary', got '%s'", cfg.SlackChannelLobsters)
+	}
+
 	if cfg.WebhookSlackChannel != "#ondemand-article-summary" {
 		t.Errorf("Expected WebhookSlackChannel to be '#ondemand-article-summary', got '%s'", cfg.WebhookSlackChannel)
 	}

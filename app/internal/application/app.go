@@ -36,7 +36,9 @@ func New() (*Application, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating processed article repository: %w", err)
 	}
-	slackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannel, cfg.SlackBaseURL)
+	redditSlackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannelReddit, cfg.SlackBaseURL)
+	hatenaSlackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannelHatena, cfg.SlackBaseURL)
+	lobstersSlackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.SlackChannelLobsters, cfg.SlackBaseURL)
 	webhookSlackRepo := repository.NewSlackRepository(cfg.SlackBotToken, cfg.WebhookSlackChannel, cfg.SlackBaseURL)
 
 	// Create services (business logic) - use production limiter by default
@@ -50,9 +52,9 @@ func New() (*Application, error) {
 	webhookHandler := handler.NewWebhook(urlService)
 	xHandler := handler.NewX(xRepo)
 	xQuoteChainHandler := handler.NewXQuoteChain(xRepo)
-	hatenaHandler := handler.NewHatenaHandler(rssRepo, geminiRepo, slackRepo, processedRepo, articleLimiter)
-	redditHandler := handler.NewRedditHandler(rssRepo, geminiRepo, slackRepo, processedRepo, articleLimiter)
-	lobstersHandler := handler.NewLobstersHandler(rssRepo, geminiRepo, slackRepo, processedRepo, articleLimiter)
+	hatenaHandler := handler.NewHatenaHandler(rssRepo, geminiRepo, hatenaSlackRepo, processedRepo, articleLimiter)
+	redditHandler := handler.NewRedditHandler(rssRepo, geminiRepo, redditSlackRepo, processedRepo, articleLimiter)
+	lobstersHandler := handler.NewLobstersHandler(rssRepo, geminiRepo, lobstersSlackRepo, processedRepo, articleLimiter)
 
 	// Cleanup function
 	cleanup := func() error {
