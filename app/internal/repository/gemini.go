@@ -71,7 +71,11 @@ func (g *geminiRepository) SummarizeURL(ctx context.Context, url string) (*Summa
 	textContent := g.extractTextFromHTML(htmlContent)
 	if textContent == "" {
 		logger.Printf("No text content found url=%s", url)
-		return nil, fmt.Errorf("no text content found")
+		return &SummarizeResponse{
+			Summary:      "JavaScriptで動的に生成されるコンテンツやSPA、画像のみのサイトのため中身が取得できませんでした。",
+			ProcessedAt:  time.Now(),
+			ContentChars: 0,
+		}, nil
 	}
 
 	logger.Printf("Text extraction completed url=%s text_length=%d", url, len(textContent))
@@ -285,7 +289,11 @@ func (g *geminiRepository) SummarizeURLForOnDemand(ctx context.Context, url stri
 	textContent := g.extractTextFromHTML(htmlContent)
 	if textContent == "" {
 		logger.Printf("No text content found for on-demand url=%s", url)
-		return nil, fmt.Errorf("no text content found")
+		return &SummarizeResponse{
+			Summary:      "JavaScriptで動的に生成されるコンテンツやSPA、画像のみのサイトのため中身が取得できませんでした。",
+			ProcessedAt:  time.Now(),
+			ContentChars: 0,
+		}, nil
 	}
 
 	logger.Printf("On-demand text extraction completed url=%s text_length=%d", url, len(textContent))
