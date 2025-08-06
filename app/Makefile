@@ -106,19 +106,38 @@ generate:
 security:
 	gosec ./...
 
-# Deploy to Google Cloud Functions
-deploy:
+# Docker image configuration
+PROJECT_ID=gen-lang-client-0715048106
+IMAGE_NAME=asia-northeast1-docker.pkg.dev/$(PROJECT_ID)/article-summarizer/article-summarizer-v3
+
+# Build for deployment (Linux target)
+build-for-deploy:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o main ./cmd/server
+
+# Docker build
+docker-build: build-for-deploy
+	docker build -t $(IMAGE_NAME) .
+
+# Docker push
+docker-push: docker-build
+	@echo "🔐 Configuring Docker authentication..."
+	gcloud auth configure-docker asia-northeast1-docker.pkg.dev --quiet
+	docker push $(IMAGE_NAME)
+
+# Deploy using pre-built image (fast method)
+deploy-image: docker-push
+	@echo "🚀 Deploying to Cloud Run service..."
 	gcloud run deploy article-summarizer-v3 \
-		--source . \
-		--function SummarizeArticles \
-		--base-image $(GO_RUNTIME_ID) \
+		--image $(IMAGE_NAME) \
 		--memory 512Mi \
 		--timeout 540s \
 		--region asia-northeast1 \
 		--service-account article-summarizer-sa@gen-lang-client-0715048106.iam.gserviceaccount.com \
 		--update-secrets "GEMINI_API_KEY=GEMINI_API_KEY:latest,SLACK_BOT_TOKEN=SLACK_BOT_TOKEN:latest,WEBHOOK_AUTH_TOKEN=WEBHOOK_AUTH_TOKEN:latest" \
+		--set-env-vars "FUNCTION_TARGET=SummarizeArticles" \
 		--allow-unauthenticated \
 		--project gen-lang-client-0715048106
+	@echo "✅ Deployment completed!"
 
 # All checks
 check: fmt vet lint test-race security
