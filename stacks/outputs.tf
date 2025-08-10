@@ -20,7 +20,12 @@ output "storage_bucket_url" {
 
 
 output "artifact_registry_repository" {
-  description = "Artifact Registry repository URL"
+  description = "Artifact Registry repository name (main)"
+  value       = google_artifact_registry_repository.article_summarizer.name
+}
+
+output "legacy_artifact_registry_repository" {
+  description = "Legacy Artifact Registry repository name"
   value       = google_artifact_registry_repository.cloud_run_source_deploy.name
 }
 

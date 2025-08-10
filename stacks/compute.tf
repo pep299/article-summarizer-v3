@@ -1,12 +1,19 @@
-# Artifact Registry repository for Cloud Run source deployments
+# Artifact Registry repository for Cloud Run source deployments (legacy)
 resource "google_artifact_registry_repository" "cloud_run_source_deploy" {
   # checkov:skip=CKV_GCP_84:Using default encryption is sufficient for this use case
   repository_id = "cloud-run-source-deploy"
   format        = "DOCKER"
   location      = var.region
   description   = "Cloud Run Source Deployments"
+}
 
-
+# New Artifact Registry repository for the application
+resource "google_artifact_registry_repository" "article_summarizer" {
+  # checkov:skip=CKV_GCP_84:Using default encryption is sufficient for this use case
+  repository_id = "article-summarizer"
+  format        = "DOCKER"
+  location      = var.region
+  description   = "Article Summarizer application images"
 }
 
 resource "google_cloud_run_v2_service" "article_summarizer" {
@@ -14,7 +21,7 @@ resource "google_cloud_run_v2_service" "article_summarizer" {
   location = var.region
 
   depends_on = [
-    google_artifact_registry_repository.cloud_run_source_deploy
+    google_artifact_registry_repository.article_summarizer
   ]
 
   lifecycle {
@@ -33,7 +40,7 @@ resource "google_cloud_run_v2_service" "article_summarizer" {
     containers {
       # Image will be managed by gcloud run deploy --source
       # This will be ignored on subsequent applies
-      image = "gcr.io/cloudrun/hello"
+      image = "${var.region}-docker.pkg.dev/${data.google_project.project.project_id}/${google_artifact_registry_repository.article_summarizer.repository_id}/${var.service_name}"
 
       resources {
         limits = {
