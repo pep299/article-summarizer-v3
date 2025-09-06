@@ -21,6 +21,7 @@ type SummarizeResponse struct {
 	Summary      string    `json:"summary"`
 	ProcessedAt  time.Time `json:"processed_at"`
 	ContentChars int       `json:"content_chars"` // Original content character count
+	Title        string    `json:"title"`         // Article title extracted from HTML
 }
 
 type GeminiRepository interface {
@@ -160,6 +161,30 @@ func (g *geminiRepository) extractTextFromHTML(html string) string {
 	return strings.TrimSpace(text)
 }
 
+func (g *geminiRepository) extractTitleFromHTML(html string) string {
+	// Extract title from <title> tag
+	titleRe := regexp.MustCompile(`(?i)<title[^>]*>([^<]*)</title>`)
+	matches := titleRe.FindStringSubmatch(html)
+	if len(matches) > 1 {
+		title := strings.TrimSpace(matches[1])
+		if title != "" {
+			return title
+		}
+	}
+
+	// Fallback to og:title meta tag
+	ogTitleRe := regexp.MustCompile(`(?i)<meta[^>]*property=["\']og:title["\'][^>]*content=["\']([^"\']*)["\']`)
+	matches = ogTitleRe.FindStringSubmatch(html)
+	if len(matches) > 1 {
+		title := strings.TrimSpace(matches[1])
+		if title != "" {
+			return title
+		}
+	}
+
+	return ""
+}
+
 func (g *geminiRepository) buildRSSPrompt(textContent string) string {
 	// Limit content to 10KB
 	if len(textContent) > 10000 {
@@ -285,7 +310,8 @@ func (g *geminiRepository) SummarizeURLForOnDemand(ctx context.Context, url stri
 	fetchDuration := time.Since(start)
 	logger.Printf("On-demand HTML fetch completed url=%s content_length=%d duration_ms=%d", url, len(htmlContent), fetchDuration.Milliseconds())
 
-	// Extract text from HTML
+	// Extract title and text from HTML
+	title := g.extractTitleFromHTML(htmlContent)
 	textContent := g.extractTextFromHTML(htmlContent)
 	if textContent == "" {
 		logger.Printf("No text content found for on-demand url=%s", url)
@@ -293,6 +319,7 @@ func (g *geminiRepository) SummarizeURLForOnDemand(ctx context.Context, url stri
 			Summary:      "JavaScriptで動的に生成されるコンテンツやSPA、画像のみのサイトのため中身が取得できませんでした。",
 			ProcessedAt:  time.Now(),
 			ContentChars: 0,
+			Title:        title,
 		}, nil
 	}
 
@@ -319,6 +346,7 @@ func (g *geminiRepository) SummarizeURLForOnDemand(ctx context.Context, url stri
 		Summary:      summary,
 		ProcessedAt:  time.Now(),
 		ContentChars: len(textContent),
+		Title:        title,
 	}, nil
 }
 

@@ -41,7 +41,7 @@ func (u *URL) Process(ctx context.Context, url string) error {
 	summaryDuration := time.Since(summaryStart)
 
 	article := repository.Item{
-		Title:  url,
+		Title:  summary.Title,
 		Link:   url,
 		Source: "on-demand",
 	}

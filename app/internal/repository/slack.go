@@ -14,7 +14,6 @@ import (
 	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
 )
 
-
 // Notification represents a unified notification structure
 type Notification struct {
 	Title        string
@@ -46,8 +45,6 @@ func NewSlackRepository(botToken, channel, baseURL string) SlackRepository {
 		},
 	}
 }
-
-
 
 func (s *slackRepository) sendMessage(ctx context.Context, message, channel string) error {
 	logger := log.New(funcframework.LogWriter(ctx), "", 0)
@@ -123,22 +120,22 @@ func (s *slackRepository) SendOnDemandSummary(ctx context.Context, article Item,
 
 func (s *slackRepository) formatOnDemandMessage(article Item, summary SummarizeResponse) string {
 	timestamp := time.Now().In(time.FixedZone("JST", 9*3600)).Format("2006-01-02 15:04:05")
-	title := article.Title
-	if title == "" {
-		title = "タイトル取得中..."
+
+	var titleSection string
+	if article.Title != "" {
+		titleSection = fmt.Sprintf("*%s*\n", article.Title)
 	}
 
 	return fmt.Sprintf(`🔗 *オンデマンド要約リクエスト完了*
 
-*%s*
-🔗 URL: %s
+%s🔗 URL: %s
 📊 コンテンツ文字数: %d文字
 
 %s
 
 📝 要約方法: オンデマンドAPI
 ⏰ 処理時刻: %s`,
-		title,
+		titleSection,
 		article.Link,
 		summary.ContentChars,
 		summary.Summary,
@@ -164,7 +161,6 @@ func (s *slackRepository) Send(ctx context.Context, notification Notification) e
 		notification.Title, notification.Source, s.channel, duration.Milliseconds())
 	return nil
 }
-
 
 func (s *slackRepository) formatNotification(notification Notification) string {
 	timestamp := time.Now().In(time.FixedZone("JST", 9*3600)).Format("2006-01-02 15:04:05")
@@ -203,4 +199,3 @@ func (s *slackRepository) formatArticleMessage(article Item, summary SummarizeRe
 		summary.Summary,
 		timestamp)
 }
-
